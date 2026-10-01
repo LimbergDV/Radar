@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from src.infrastructure.database.models import settings
+from src.infrastructure.database.settings import settings  # <--- Esta es la línea que hay que corregir
 
 engine = create_async_engine(
     settings.database_url,

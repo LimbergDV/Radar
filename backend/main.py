@@ -3,14 +3,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from src.infrastructure.database.settings import settings
 
+# 1. Agrega esta importación
+from src.presentation.routers import youtube_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Se ejecuta al iniciar y al apagar la app."""
     print("🚀 Radar API iniciando...")
     yield
     print("🛑 Radar API apagándose...")
-
 
 app = FastAPI(
     title="Radar API",
@@ -27,6 +27,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 2. Agrega el router de YouTube
+app.include_router(youtube_router.router, prefix="/api/youtube", tags=["YouTube"])
 
 @app.get("/health", tags=["System"])
 async def health_check():
