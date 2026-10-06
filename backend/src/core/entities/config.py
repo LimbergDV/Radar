@@ -16,11 +16,14 @@ class GoogleNewsConfig:
     q: str = "Inteligencia Artificial OR IA"
     hl: str = "es-419"
     gl: str = "MX"
+    # Varios pares separados por coma -> feed dual (p.ej. "MX:es-419,US:en")
     ceid: str = "MX:es-419"
     when: str = "1d"
     site: str = ""
     intitle: str = ""
     max_results: int = 50
+    # Ventana de antiguedad en dias para el sync (0 = sin filtro)
+    days_window: int = 1
     last_search_at: datetime | None = None
 
 

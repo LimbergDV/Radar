@@ -1,10 +1,19 @@
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from src.infrastructure.database.settings import settings  # <--- Esta es la línea que hay que corregir
+"""Engine y session factory de SQLAlchemy async.
+
+`get_db` (la dependencia que entrega una sesion por request) vive en
+`src/presentation/dependencies.py`: es una pieza de FastAPI, no de infraestructura.
+"""
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from src.infrastructure.database.settings import settings
 
 engine = create_async_engine(
     settings.database_url,
-    echo=settings.app_env == "development",  # Muestra queries en consola solo en dev
+    # Echo solo en desarrollo, y sin el ruido de las sentencias internas.
+    echo=settings.app_env == "development" and settings.sql_echo,
     pool_pre_ping=True,
+    pool_recycle=1800,
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -14,12 +23,9 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 
-async def get_db() -> AsyncSession:
-    """Dependencia de FastAPI — inyecta una sesión por request."""
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
+async def dispose_engine() -> None:
+    """Cierra el pool de conexiones (para el apagado de la app)."""
+    await engine.dispose()
+
+
+__all__ = ["engine", "AsyncSessionLocal", "AsyncSession", "dispose_engine"]

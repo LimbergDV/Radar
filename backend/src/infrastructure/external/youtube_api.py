@@ -1,15 +1,28 @@
+"""Pipeline de YouTube: resolver handles, buscar candidatos, enriquecer en lotes
+de 50 y filtrar/transcribir.
+
+Los criterios de filtrado viven en `core/use_cases/sync_youtube.py`; aqui solo
+hay red.
+"""
+
 import asyncio
-import httpx
-import re
 from datetime import datetime, timedelta, timezone
-from youtube_transcript_api import YouTubeTranscriptApi
-from youtube_transcript_api.formatters import TextFormatter
 
-from src.core.entities.youtube import YouTubeVideo
+import httpx
+
 from src.core.entities.config import YouTubeConfig
+from src.core.entities.youtube import YouTubeVideo
+from src.core.logging_config import get_logger
+from src.core.use_cases import sync_youtube as uc
 
-# Regex para detectar caracteres no latinos (asiáticos, cirílicos, etc.)
-FOREIGN_CHARS_REGEX = re.compile(r'[\u0900-\u097F\u0E00-\u0E7F\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF\u0400-\u04FF\u0600-\u06FF]')
+logger = get_logger(__name__)
+
+REQUEST_TIMEOUT = 30.0
+# 50 de 100: deja margen al filtro de idioma/Shorts.
+SEARCH_MAX_RESULTS = 50
+ENRICH_BATCH_SIZE = 50
+DAYS_BACK = 2
+NO_TRANSCRIPT = "Transcripción no disponible"
 
 
 class YouTubeFetcher:
@@ -19,208 +32,243 @@ class YouTubeFetcher:
         self.api_key = api_key
         self.base_url = "https://youtube.googleapis.com/youtube/v3"
 
+    def _client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            timeout=REQUEST_TIMEOUT,
+            headers={"User-Agent": "NewsRadar/1.0"},
+        )
+
     async def _resolve_channel_handles(self, channel_ids: list[str]) -> list[str]:
-        """Fase 1: Convierte @handles a channelIds reales."""
+        """Convierte @handles a channelIds reales, concurrente."""
         if not channel_ids:
             return []
 
-        resolved = []
-        async with httpx.AsyncClient() as client:
-            for raw_id in channel_ids:
-                if raw_id.startswith("@"):
-                    handle = raw_id.replace("@", "")
-                    try:
-                        res = await client.get(
-                            f"{self.base_url}/channels",
-                            params={"part": "id", "forHandle": handle, "key": self.api_key}
-                        )
-                        data = res.json()
-                        if data.get("items"):
-                            resolved.append(data["items"][0]["id"])
-                    except Exception as e:
-                        print(f"Error resolviendo canal {handle}: {e}")
-                else:
-                    resolved.append(raw_id)
-        return resolved
+        async with self._client() as client:
+            async def resolve(raw_id: str) -> str | None:
+                if not raw_id.startswith("@"):
+                    return raw_id
 
-    async def _fetch_search_candidates(self, config: YouTubeConfig, channel_ids: list[str]) -> list[dict]:
-        """Fase 2: Búsqueda concurrente (idiomas + canales)."""
+                handle = raw_id.lstrip("@")
+                try:
+                    response = await client.get(
+                        f"{self.base_url}/channels",
+                        params={"part": "id", "forHandle": handle, "key": self.api_key},
+                    )
+                    if response.status_code != 200:
+                        logger.warning("No se pudo resolver @%s: HTTP %s", handle, response.status_code)
+                        return None
+                    items = response.json().get("items", [])
+                    if items:
+                        return items[0]["id"]
+                    logger.warning("El handle @%s no existe", handle)
+                except httpx.HTTPError as exc:
+                    logger.warning("Error resolviendo @%s: %s", handle, exc)
+                return None
+
+            resolved = await asyncio.gather(*(resolve(cid) for cid in channel_ids))
+
+        return [cid for cid in resolved if cid]
+
+    async def _fetch_search_candidates(
+        self,
+        config: YouTubeConfig,
+        channel_ids: list[str],
+    ) -> list[dict]:
+        """Busqueda concurrente por canal y por keyword/idioma."""
         query = " | ".join(config.keywords) if config.keywords else ""
         query = f"{query} -shorts -#shorts" if query else "-shorts -#shorts"
 
-        two_days_ago = (datetime.now(timezone.utc) - timedelta(days=2)).strftime('%Y-%m-%dT%H:%M:%SZ')
-        
-        async with httpx.AsyncClient() as client:
-            tasks = []
-            
-            # 1. Búsqueda por canales específicos
-            for cid in channel_ids:
-                url = f"{self.base_url}/search"
+        published_after = (
+            datetime.now(timezone.utc) - timedelta(days=DAYS_BACK)
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        requests_to_make: list[dict] = []
+
+        for channel_id in channel_ids:
+            requests_to_make.append({
+                "part": "snippet",
+                "type": "video",
+                "maxResults": SEARCH_MAX_RESULTS,
+                "order": "date",
+                "publishedAfter": published_after,
+                "channelId": channel_id,
+            })
+
+        if config.keywords:
+            for language in (config.languages or ["any"]):
                 params = {
-                    "part": "snippet", "type": "video", "maxResults": 50,
-                    "order": "date", "publishedAfter": two_days_ago,
-                    "channelId": cid, "key": self.api_key
+                    "part": "snippet",
+                    "q": query,
+                    "type": "video",
+                    "maxResults": SEARCH_MAX_RESULTS,
+                    "order": "date",
                 }
-                tasks.append(client.get(url, params=params))
+                if language != "any":
+                    params["relevanceLanguage"] = language
+                    params["regionCode"] = "US" if language == "en" else "MX"
+                requests_to_make.append(params)
 
-            # 2. Búsqueda global por idiomas (si hay keywords)
-            if config.keywords:
-                langs = config.languages if config.languages else ["any"]
-                for lang in langs:
-                    params = {
-                        "part": "snippet", "q": query, "type": "video",
-                        "maxResults": 50, "order": "date",
-                        "key": self.api_key
-                    }
-                    if lang != "any":
-                        params["relevanceLanguage"] = lang
-                        if lang == "en": params["regionCode"] = "US"
-                        if lang == "es": params["regionCode"] = "MX"
-                    
-                    tasks.append(client.get(f"{self.base_url}/search", params=params))
+        if not requests_to_make:
+            return []
 
-            # Ejecutar todas las peticiones al mismo tiempo
-            responses = await asyncio.gather(*tasks, return_exceptions=True)
-            
-        items = []
-        seen_ids = set()
-        
-        for res in responses:
-            if isinstance(res, Exception):
-                print(f"Excepción en petición a YouTube: {res}")
+        async with self._client() as client:
+            responses = await asyncio.gather(
+                *(client.get(f"{self.base_url}/search", params={**p, "key": self.api_key})
+                  for p in requests_to_make),
+                return_exceptions=True,
+            )
+
+        items: list[dict] = []
+        seen_ids: set[str] = set()
+
+        for response in responses:
+            if isinstance(response, Exception):
+                logger.warning("Excepcion en busqueda de YouTube: %s", response)
                 continue
-            if res.status_code != 200:
-                print(f"Error de YouTube API: {res.status_code} - {res.text}")
+            if response.status_code != 200:
+                logger.warning("YouTube API devolvio %s: %s", response.status_code, response.text[:200])
                 continue
-                
-            data = res.json()
-            # ¡ESTO ERA LO QUE FALTABA! 👇
-            for item in data.get("items", []):
-                vid = item.get("id", {}).get("videoId")
-                if vid and vid not in seen_ids:
-                    seen_ids.add(vid)
+
+            for item in response.json().get("items", []):
+                video_id = (item.get("id") or {}).get("videoId")
+                if video_id and video_id not in seen_ids:
+                    seen_ids.add(video_id)
                     items.append(item)
 
-        # Ordenar cronológicamente (más nuevo primero)
-        items.sort(key=lambda x: x["snippet"]["publishedAt"], reverse=True)
+        items.sort(key=lambda x: (x.get("snippet") or {}).get("publishedAt", ""), reverse=True)
+        logger.info("YouTube: %d candidatos unicos", len(items))
         return items
 
     async def _enrich_videos_batch(self, items: list[dict]) -> list[dict]:
-        """Fase 3: Obtener estadísticas y duración en batches de 50."""
-        valid_items = [i for i in items if i.get("id", {}).get("videoId")]
+        """Añade estadisticas y duracion con videos.list (max 50 ids por llamada)."""
+        valid_items = [i for i in items if (i.get("id") or {}).get("videoId")]
         if not valid_items:
             return []
 
-        enriched = []
-        chunk_size = 50
-        
-        async with httpx.AsyncClient() as client:
-            for i in range(0, len(valid_items), chunk_size):
-                chunk = valid_items[i:i + chunk_size]
-                video_ids = ",".join(item["id"]["videoId"] for item in chunk)
-                
-                res = await client.get(
-                    f"{self.base_url}/videos",
-                    params={
-                        "part": "statistics,contentDetails,snippet",
-                        "id": video_ids,
-                        "key": self.api_key
-                    }
-                )
-                if res.status_code == 200:
-                    enriched.extend(res.json().get("items", []))
-                    
+        enriched: list[dict] = []
+
+        async with self._client() as client:
+            for start in range(0, len(valid_items), ENRICH_BATCH_SIZE):
+                chunk = valid_items[start:start + ENRICH_BATCH_SIZE]
+                ids = ",".join(item["id"]["videoId"] for item in chunk)
+
+                try:
+                    response = await client.get(
+                        f"{self.base_url}/videos",
+                        params={
+                            "part": "statistics,contentDetails,snippet",
+                            "id": ids,
+                            "key": self.api_key,
+                        },
+                    )
+                except httpx.HTTPError as exc:
+                    logger.warning("Error enriqueciendo lote: %s", exc)
+                    continue
+
+                if response.status_code == 200:
+                    enriched.extend(response.json().get("items", []))
+                else:
+                    logger.warning("YouTube videos.list devolvio %s", response.status_code)
+
+        logger.info("YouTube: %d videos enriquecidos", len(enriched))
         return enriched
 
-    def _parse_duration(self, iso_duration: str) -> int:
-        """Convierte PT15M33S a segundos."""
-        if not iso_duration: return 0
-        match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', iso_duration)
-        if not match: return 0
-        hours = int(match.group(1) or 0)
-        minutes = int(match.group(2) or 0)
-        seconds = int(match.group(3) or 0)
-        return hours * 3600 + minutes * 60 + seconds
+    async def _filter_and_transcribe(
+        self,
+        videos: list[dict],
+        config: YouTubeConfig,
+    ) -> list[YouTubeVideo]:
+        """Aplica filtros y obtiene la transcripcion de cada video."""
+        candidates = [item for item in videos if uc.passes_filters(item, config)]
 
-    async def _filter_and_transcribe(self, videos: list[dict], config: YouTubeConfig) -> list[YouTubeVideo]:
-        """Fase 4: Filtrado estricto (Shorts, Idiomas) y Extracción de Transcripción."""
-        final_videos = []
-        pushed_per_channel = {}
-        total_pushed = 0
-        
-        is_global = not config.channel_ids
-        langs_to_try = config.languages if config.languages else ["es", "en"]
-        
-        # Como obtener transcripciones es bloqueante/lento (usa requests síncronos), lo corremos en un threadpool
-        def fetch_transcript(video_id: str) -> str:
-            try:
-                transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=langs_to_try)
-                return TextFormatter().format_transcript(transcript_list).replace('\n', ' ')
-            except Exception:
-                return "Transcripción no disponible"
-
-        for item in videos:
-            vid = item["id"]
-            snippet = item.get("snippet", {})
-            channel_id = snippet.get("channelId")
-            
-            # 1. Validar límite
-            if is_global:
-                if total_pushed >= config.max_results: break
-            else:
-                if pushed_per_channel.get(channel_id, 0) >= config.max_results: continue
-
-            # 2. Filtro estricto de Idioma
-            audio_lang = snippet.get("defaultAudioLanguage") or snippet.get("defaultLanguage")
-            if audio_lang:
-                if not any(lang.lower() in audio_lang.lower() for lang in langs_to_try):
-                    continue
-            else:
-                if FOREIGN_CHARS_REGEX.search(snippet.get("title", "")):
-                    continue
-
-            # 3. Filtro de Shorts (< 2 min)
-            duration_secs = self._parse_duration(item.get("contentDetails", {}).get("duration", ""))
-            if duration_secs <= 120:
-                continue
-
-            # 4. Transcripción (No bloqueante usando run_in_executor)
-            transcript = await asyncio.to_thread(fetch_transcript, vid)
-            
-            stats = item.get("statistics", {})
-            
-            final_videos.append(
-                YouTubeVideo(
-                    id=vid,
-                    title=snippet.get("title", ""),
-                    channel=snippet.get("channelTitle", ""),
-                    channel_id=channel_id,
-                    published_at=datetime.fromisoformat(snippet["publishedAt"].replace('Z', '+00:00')),
-                    url=f"https://www.youtube.com/watch?v={vid}",
-                    thumbnail_url=snippet.get("thumbnails", {}).get("high", {}).get("url", ""),
-                    transcript=transcript,
-                    views=int(stats.get("viewCount", 0)),
-                    likes=int(stats.get("likeCount", 0)),
-                    comments=int(stats.get("commentCount", 0)),
-                    duration_seconds=duration_secs,
-                    language=audio_lang or "unknown",
-                    synced_at=datetime.now(timezone.utc)
-                )
-            )
-            
-            pushed_per_channel[channel_id] = pushed_per_channel.get(channel_id, 0) + 1
-            total_pushed += 1
-            
-        return final_videos
-
-    async def sync_pipeline(self, config: YouTubeConfig) -> list[YouTubeVideo]:
-        """Ejecuta el pipeline completo y retorna la lista de videos listos para guardar."""
-        channel_ids = await self._resolve_channel_handles(config.channel_ids)
-        search_items = await self._fetch_search_candidates(config, channel_ids)
-        if not search_items:
+        if not candidates:
             return []
-            
-        enriched_videos = await self._enrich_videos_batch(search_items)
-        final_videos = await self._filter_and_transcribe(enriched_videos, config)
-        
-        return final_videos
+
+        selected = uc.select_with_limits(candidates, config)
+        logger.info(
+            "YouTube: %d pasan los filtros -> %d seleccionados (limite %d)",
+            len(candidates),
+            len(selected),
+            config.max_results,
+        )
+
+        languages = config.languages or ["es", "en"]
+        synced_at = datetime.now(timezone.utc)
+
+        async def process(item: dict) -> tuple[YouTubeVideo | None, str | None]:
+            video_id = item["id"]
+            transcript, error = await asyncio.to_thread(fetch_transcript, video_id, languages)
+            return uc.build_video(item, transcript, synced_at), error
+
+        results = await asyncio.gather(*(process(item) for item in selected))
+
+        videos = [video for video, _error in results if video is not None]
+        self._log_transcript_summary([error for _video, error in results])
+
+        return videos
+
+    @staticmethod
+    def _log_transcript_summary(errors: list[str | None]) -> None:
+        """Reporta cuantas transcripciones se obtuvieron y por que fallaron.
+
+        Sin esto el fallo se tragaba en silencio y parecia que los videos no
+        tienen transcripcion, cuando lo habitual es que YouTube este limitando
+        la IP (IpBlocked).
+        """
+        total = len(errors)
+        if not total:
+            return
+
+        obtained = sum(1 for error in errors if error is None)
+        if obtained == total:
+            logger.info("Transcripciones: %d/%d obtenidas", obtained, total)
+            return
+
+        counts: dict[str, int] = {}
+        for error in errors:
+            if error:
+                counts[error] = counts.get(error, 0) + 1
+
+        detalle = ", ".join(f"{reason} x{n}" for reason, n in sorted(counts.items()))
+        logger.warning(
+            "Transcripciones: solo %d/%d obtenidas (%s). Si aparece IpBlocked, "
+            "YouTube esta limitando esta IP; se reintentan en la proxima sincronizacion.",
+            obtained,
+            total,
+            detalle,
+        )
+
+
+def fetch_transcript(video_id: str, languages: list[str]) -> tuple[str, str | None]:
+    """Devuelve (texto, error); el texto es el placeholder si no se pudo obtener.
+
+    OJO: en `youtube-transcript-api` 1.x el metodo de clase `get_transcript` ya
+    no existe y la API es instancia + `.fetch(...)`. Antes se llamaba al viejo y
+    un `except Exception` convertia el fallo en "no disponible" para todos los
+    videos.
+    """
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+
+        fetched = YouTubeTranscriptApi().fetch(video_id, languages=languages)
+        snippets = getattr(fetched, "snippets", None)
+        if snippets is None:
+            snippets = list(fetched)
+        text = " ".join(snippet.text for snippet in snippets).strip()
+        return (text, None) if text else (NO_TRANSCRIPT, "vacia")
+    except Exception as exc:  # noqa: BLE001 - sin transcripcion no es un fallo del sync
+        return NO_TRANSCRIPT, type(exc).__name__
+
+
+async def sync_pipeline(config: YouTubeConfig, api_key: str) -> list[YouTubeVideo]:
+    """Ejecuta el pipeline completo y devuelve los videos listos para guardar."""
+    fetcher = YouTubeFetcher(api_key=api_key)
+
+    channel_ids = await fetcher._resolve_channel_handles(config.channel_ids)
+    search_items = await fetcher._fetch_search_candidates(config, channel_ids)
+    if not search_items:
+        logger.warning("YouTube no devolvio candidatos")
+        return []
+
+    enriched = await fetcher._enrich_videos_batch(search_items)
+    return await fetcher._filter_and_transcribe(enriched, config)

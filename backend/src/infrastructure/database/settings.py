@@ -6,15 +6,22 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        case_sensitive=False,
     )
 
     database_url: str
+    sql_echo: bool = False
+
     youtube_api_key: str = ""
+    # Sin token el rate limit de GitHub es 60 req/h; con token, 5000.
     github_token: str = ""
+
     app_env: str = "development"
     app_port: int = 8000
     cors_origins: list[str] = ["http://localhost:4200"]
+
     sync_interval_minutes: int = 60
+    log_level: str = "INFO"
 
 
 # Instancia global — se importa desde cualquier lado
