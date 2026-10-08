@@ -1,0 +1,101 @@
+<app-page-header
+  title="GitHub"
+  eyebrow="Repositorios"
+  icon="Github"
+  description="Repos de IA activos, con su README descargado para leer sin salir."
+>
+  <app-sync-button source="github" variant="ghost" label="Sincronizar" (synced)="onSynced()" />
+</app-page-header>
+
+<div class="filters">
+  <div class="chips">
+    @for (lang of ['Python', 'TypeScript', 'Go', 'Rust']; track lang) {
+      <button
+        class="chip"
+        type="button"
+        [class.chip--on]="language() === lang"
+        (click)="setLanguage(language() === lang ? '' : lang)"
+      >
+        {{ lang }}
+      </button>
+    }
+  </div>
+
+  <label class="search">
+    <lucide-icon name="Search" [size]="14" aria-hidden="true" />
+    <input
+      type="search"
+      placeholder="Filtrar por topic"
+      [ngModel]="topic()"
+      (ngModelChange)="onTopic($event)"
+    />
+  </label>
+</div>
+
+@if (loading()) {
+  <div class="grid">
+    @for (i of [1, 2, 3, 4]; track i) {
+      <app-card-skeleton source="github" />
+    }
+  </div>
+} @else if (error()) {
+  <app-empty-state icon="CircleAlert" title="No se pudieron cargar los repos" [message]="error()!" />
+} @else if (!items().length) {
+  <app-empty-state
+    icon="Github"
+    title="Ningún repo coincide"
+    message="Prueba con otro lenguaje o quita el filtro de topic."
+  />
+} @else {
+  <div class="grid">
+    @for (repo of items(); track repo.id) {
+      <article class="card">
+        <a class="card__link" [routerLink]="['/github', repo.id]">
+          <div class="card__head">
+            <div class="avatar" aria-hidden="true">
+              @if (repo.owner_avatar_url) {
+                <img [src]="repo.owner_avatar_url" alt="" loading="lazy" />
+              } @else {
+                {{ repo.full_name.charAt(0).toUpperCase() }}
+              }
+            </div>
+            <div class="card__id">
+              <p class="card__name u-clamp-1">{{ repo.full_name }}</p>
+              <p class="u-meta u-clamp-1">{{ repo.updated_at | timeAgo }}</p>
+            </div>
+          </div>
+
+          <p class="card__desc u-clamp-2">{{ repo.description || 'Sin descripción.' }}</p>
+
+          <div class="card__topics">
+            @for (topic of repo.topics.slice(0, 3); track topic) {
+              <span class="topic">{{ topic }}</span>
+            }
+          </div>
+
+          <div class="card__metrics">
+            <span class="metric">
+              <lucide-icon name="Star" [size]="12" aria-hidden="true" />
+              {{ repo.stargazers_count | compactNumber }}
+            </span>
+            <span class="metric">
+              <lucide-icon name="GitFork" [size]="12" aria-hidden="true" />
+              {{ repo.forks_count | compactNumber }}
+            </span>
+            @if (repo.language) {
+              <span class="metric metric--right">{{ repo.language }}</span>
+            }
+          </div>
+        </a>
+      </article>
+    }
+  </div>
+
+  @if (hasMore()) {
+    <div class="more">
+      <button class="more__btn" type="button" [disabled]="loading()" (click)="resource.loadMore()">
+        Cargar más
+      </button>
+    </div>
+  }
+}

@@ -1,0 +1,107 @@
+.chips {
+  display: flex;
+  gap: var(--space-8);
+  margin-bottom: var(--space-20);
+}
+
+.chip {
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--color-fog);
+  border-radius: var(--radius-control);
+  background: var(--color-canvas);
+  color: var(--color-slate);
+  font-size: var(--text-body-sm);
+  cursor: pointer;
+
+  &--on {
+    background: var(--color-paper);
+    border-color: var(--color-slate);
+    color: var(--color-ink-black);
+  }
+}
+
+// Las noticias son texto puro: lista a una columna, no rejilla de cards.
+.list {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--color-fog);
+}
+
+.row {
+  border-bottom: 1px solid var(--color-fog);
+  transition: background 120ms var(--ease);
+
+  &:hover {
+    background: var(--color-paper);
+  }
+}
+
+.row__link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-16);
+  padding: var(--space-16) var(--space-12);
+}
+
+.row__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.row__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin-bottom: var(--space-8);
+}
+
+.medium {
+  font-size: var(--text-caption);
+  font-weight: var(--weight-medium);
+  color: var(--color-ink-black);
+}
+
+.dot {
+  color: var(--color-fog);
+  font-size: var(--text-caption);
+}
+
+.flag {
+  padding: 1px 7px;
+  border-radius: var(--radius-control);
+  background: var(--color-paper);
+  color: var(--color-slate);
+  font-size: var(--text-caption);
+}
+
+.row__title {
+  font-size: var(--text-subheading);
+  font-weight: var(--weight-semibold);
+  line-height: 1.4;
+  letter-spacing: var(--tracking-tight);
+  max-width: 78ch;
+}
+
+.row__chevron {
+  flex: 0 0 auto;
+  color: var(--color-fog);
+}
+
+.more {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-28);
+}
+
+.more__btn {
+  padding: var(--space-8) var(--space-20);
+  border: 1px solid var(--color-fog);
+  border-radius: var(--radius-control);
+  background: var(--color-canvas);
+  font-size: var(--text-body-sm);
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: var(--color-paper);
+  }
+}

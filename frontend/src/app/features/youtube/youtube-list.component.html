@@ -1,0 +1,75 @@
+<app-page-header
+  title="YouTube"
+  eyebrow="Videos"
+  icon="Youtube"
+  description="Videos recientes sobre IA, filtrados por idioma y sin Shorts."
+>
+  <app-sync-button source="youtube" variant="ghost" label="Sincronizar" (synced)="onSynced()" />
+</app-page-header>
+
+<div class="chips">
+  @for (lang of languages; track lang.value) {
+    <button
+      class="chip"
+      type="button"
+      [class.chip--on]="language() === lang.value"
+      (click)="setLanguage(lang.value)"
+    >
+      {{ lang.label }}
+    </button>
+  }
+</div>
+
+@if (loading()) {
+  <div class="grid">
+    @for (i of [1, 2, 3, 4]; track i) {
+      <app-card-skeleton source="youtube" />
+    }
+  </div>
+} @else if (error()) {
+  <app-empty-state icon="CircleAlert" title="No se pudieron cargar los videos" [message]="error()!" />
+} @else if (!items().length) {
+  <app-empty-state
+    icon="Youtube"
+    title="Sin videos todavía"
+    message="Pulsa Sincronizar para traer los videos de hoy según los filtros configurados."
+  />
+} @else {
+  <div class="grid">
+    @for (video of items(); track video.id) {
+      <article class="card">
+        <a class="card__link" [routerLink]="['/youtube', video.id]">
+          <div class="card__thumb">
+            <img [src]="video.thumbnail_url" [alt]="''" loading="lazy" />
+            <span class="card__duration">{{ video.duration_seconds | duration }}</span>
+          </div>
+          <h3 class="card__title u-clamp-2">{{ video.title }}</h3>
+          <p class="u-meta u-clamp-1">{{ video.channel }}</p>
+          <div class="card__metrics">
+            <span class="metric">
+              <lucide-icon name="Eye" [size]="12" aria-hidden="true" />
+              {{ video.views | compactNumber }}
+            </span>
+            <span class="metric">
+              <lucide-icon name="Star" [size]="12" aria-hidden="true" />
+              {{ video.likes | compactNumber }}
+            </span>
+            <span class="metric">
+              <lucide-icon name="Hash" [size]="12" aria-hidden="true" />
+              {{ video.comments | compactNumber }}
+            </span>
+            <span class="metric metric--time">{{ video.published_at | timeAgo }}</span>
+          </div>
+        </a>
+      </article>
+    }
+  </div>
+
+  @if (hasMore()) {
+    <div class="more">
+      <button class="more__btn" type="button" [disabled]="loading()" (click)="resource.loadMore()">
+        Cargar más
+      </button>
+    </div>
+  }
+}

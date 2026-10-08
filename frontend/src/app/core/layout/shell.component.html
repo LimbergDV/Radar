@@ -1,0 +1,51 @@
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" routerLink="/feed">
+      <span class="brand__mark" aria-hidden="true"></span>
+      <span class="brand__name">Radar</span>
+    </a>
+
+    <nav class="nav" aria-label="Principal">
+      @for (item of nav; track item.path) {
+        <a class="nav__item" [routerLink]="item.path" routerLinkActive="nav__item--active">
+          <lucide-icon [name]="item.icon" [size]="18" aria-hidden="true" />
+          <span>{{ item.label }}</span>
+        </a>
+      }
+    </nav>
+
+    <div class="sidebar__foot">
+      <div class="status" [class.status--off]="online() === false">
+        <span class="status__dot" aria-hidden="true"></span>
+        @if (online() === null) {
+          Comprobando
+        } @else if (online()) {
+          Backend en línea
+        } @else {
+          Backend caído
+        }
+      </div>
+      <p class="u-mono-label sidebar__meta">FastAPI · PostgreSQL</p>
+    </div>
+  </aside>
+
+  <main class="content">
+    <router-outlet />
+  </main>
+
+  @if (toasts.toasts().length) {
+    <div class="toasts" role="status" aria-live="polite">
+      @for (toast of toasts.toasts(); track toast.id) {
+        <div class="toast" [class]="'toast toast--' + toast.kind">
+          <lucide-icon [name]="toast.kind === 'success' ? 'Check' : toast.kind === 'error' ? 'CircleAlert' : 'Info'"
+                        [size]="14" aria-hidden="true" />
+          <span>{{ toast.message }}</span>
+          <button class="toast__close" type="button" aria-label="Cerrar"
+                  (click)="toasts.dismiss(toast.id)">
+            <lucide-icon name="X" [size]="12" />
+          </button>
+        </div>
+      }
+    </div>
+  }
+</div>

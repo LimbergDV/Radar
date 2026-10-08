@@ -1,0 +1,56 @@
+<article class="card">
+  <a class="card__link" [routerLink]="itemLink()" [attr.aria-label]="item().title">
+    @if (hasThumbnail()) {
+      <div class="card__thumb">
+        <img [src]="item().image_url" [alt]="''" loading="lazy" />
+        @if (duration()) {
+          <span class="card__duration">{{ duration() }}</span>
+        }
+      </div>
+    } @else if (item().source === 'github') {
+      <div class="card__avatar" aria-hidden="true">
+        @if (item().image_url) {
+          <img [src]="item().image_url" alt="" loading="lazy" />
+        } @else {
+          <span>{{ item().title.charAt(0).toUpperCase() }}</span>
+        }
+      </div>
+    }
+
+    <div class="card__body">
+      <div class="card__eyebrow">
+        <app-source-badge [source]="item().source" />
+        @if (tagline()) {
+          <span class="u-meta card__tagline">{{ tagline() }}</span>
+        }
+        <span class="card__dot" aria-hidden="true">·</span>
+        <time class="u-meta" [attr.datetime]="item().published_at">
+          {{ item().published_at | timeAgo }}
+        </time>
+      </div>
+
+      <h3 class="card__title u-clamp-2">{{ item().title }}</h3>
+
+      @if (item().description) {
+        <p class="card__excerpt u-meta u-clamp-2">{{ item().description }}</p>
+      }
+
+      <div class="card__footer">
+        @for (metric of metrics(); track metric.icon) {
+          <span class="card__metric">
+            <lucide-icon [name]="metric.icon" [size]="12" aria-hidden="true" />
+            {{ metric.value | compactNumber }}
+          </span>
+        }
+
+        @if (item().source === 'news' && !item().extra.content_fetched) {
+          <span class="card__flag">sin resumen</span>
+        }
+
+        @if (item().source === 'github' && item().extra.topics?.length) {
+          <span class="card__topic">{{ item().extra.topics![0] }}</span>
+        }
+      </div>
+    </div>
+  </a>
+</article>

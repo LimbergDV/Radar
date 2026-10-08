@@ -1,0 +1,153 @@
+.page {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-20);
+  margin-bottom: var(--space-28);
+}
+
+.page__sub {
+  margin-top: var(--space-8);
+  max-width: 52ch;
+  font-size: var(--text-body-sm);
+  color: var(--color-slate);
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-12);
+  margin-bottom: var(--space-28);
+}
+
+.tiles__link {
+  display: block;
+  border-radius: var(--radius-card);
+
+  &:hover app-stat-tile .tile {
+    background: var(--color-paper);
+  }
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+  padding-bottom: var(--space-16);
+  margin-bottom: var(--space-16);
+  border-bottom: 1px solid var(--color-fog);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--color-fog);
+  border-radius: var(--radius-control);
+  background: var(--color-canvas);
+  color: var(--color-slate);
+  font-size: var(--text-body-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: all 120ms var(--ease);
+
+  &:hover {
+    background: var(--color-paper);
+    color: var(--color-ink-black);
+  }
+
+  &--on {
+    background: var(--color-paper);
+    border-color: var(--color-slate);
+    color: var(--color-ink-black);
+  }
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-8) var(--space-12);
+  background: var(--color-paper);
+  border: 1px solid var(--color-fog);
+  border-radius: var(--radius-control);
+  color: var(--color-slate);
+  min-width: 240px;
+  transition: background 120ms var(--ease);
+
+  &:focus-within {
+    background: var(--color-canvas);
+  }
+
+  input {
+    width: 100%;
+    border: 0;
+    background: none;
+    outline: none;
+    font: inherit;
+    font-size: var(--text-body-sm);
+    color: var(--color-ink-black);
+
+    &::placeholder {
+      color: var(--color-slate);
+    }
+  }
+}
+
+.active-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin-bottom: var(--space-16);
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-blueprint-blue);
+  font-size: var(--text-caption);
+  cursor: pointer;
+}
+
+.grid {
+  display: grid;
+  // DESIGN.md pide rejilla de dos columnas; el ancho mínimo evita que se
+  // colapse a tres en pantallas anchas.
+  grid-template-columns: repeat(auto-fill, minmax(440px, 1fr));
+  gap: var(--space-12);
+}
+
+.more {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-28);
+}
+
+.more__btn {
+  padding: var(--space-8) var(--space-20);
+  border: 1px solid var(--color-fog);
+  border-radius: var(--radius-control);
+  background: var(--color-canvas);
+  font-size: var(--text-body-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: var(--color-paper);
+  }
+
+  &:disabled {
+    cursor: progress;
+    opacity: 0.6;
+  }
+}

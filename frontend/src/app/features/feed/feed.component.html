@@ -1,0 +1,105 @@
+<header class="page">
+  <div class="page__lead">
+    <h1>Radar</h1>
+    <p class="page__sub">
+      Noticias, videos y repositorios de IA en un solo feed, sincronizados a diario.
+    </p>
+  </div>
+  <app-sync-button label="Sincronizar todo" (synced)="onSynced()" />
+</header>
+
+@if (stats(); as data) {
+  <section class="tiles" aria-label="Resumen">
+    <a class="tiles__link" routerLink="/youtube">
+      <app-stat-tile
+        label="YouTube"
+        [value]="data.youtube.total | compactNumber"
+        [hint]="lastLabel(data.youtube.latest_item_at)"
+        [icon]="'Youtube'"
+      />
+    </a>
+    <a class="tiles__link" routerLink="/news">
+      <app-stat-tile
+        label="Noticias"
+        [value]="data.news.total | compactNumber"
+        [hint]="lastLabel(data.news.latest_item_at)"
+        [icon]="'Newspaper'"
+      />
+    </a>
+    <a class="tiles__link" routerLink="/github">
+      <app-stat-tile
+        label="GitHub"
+        [value]="data.github.total | compactNumber"
+        [hint]="lastLabel(data.github.latest_item_at)"
+        [icon]="'Github'"
+      />
+    </a>
+  </section>
+}
+
+<section class="toolbar" aria-label="Filtros">
+  <div class="chips">
+    @for (item of sources; track item.value) {
+      <button
+        class="chip"
+        type="button"
+        [class.chip--on]="store.filters().source === item.value"
+        (click)="setSource(item.value)"
+      >
+        <lucide-icon [name]="item.icon" [size]="14" aria-hidden="true" />
+        {{ item.label }}
+      </button>
+    }
+  </div>
+
+  <label class="search">
+    <lucide-icon name="Search" [size]="14" aria-hidden="true" />
+    <input
+      type="search"
+      placeholder="Buscar en el feed"
+      [ngModel]="search()"
+      (ngModelChange)="onSearch($event)"
+    />
+  </label>
+</section>
+
+@if (store.filters().language) {
+  <div class="active-filter">
+    <span class="u-meta">Idioma: {{ store.filters().language }}</span>
+    <button class="link" type="button" (click)="setLanguage(store.filters().language)">Quitar</button>
+  </div>
+}
+
+@if (store.loading()) {
+  <div class="grid">
+    @for (i of [1, 2, 3, 4, 5, 6]; track i) {
+      <app-card-skeleton />
+    }
+  </div>
+} @else if (store.error()) {
+  <app-empty-state
+    icon="CircleAlert"
+    title="No se pudo cargar el feed"
+    [message]="store.error()!"
+  />
+} @else if (!store.items().length) {
+  <app-empty-state
+    icon="LayoutGrid"
+    title="Nada por aquí todavía"
+    message="Ajusta los filtros o pulsa Sincronizar para traer contenido nuevo."
+  />
+} @else {
+  <div class="grid">
+    @for (item of store.items(); track item.source + item.source_id) {
+      <app-feed-card [item]="item" />
+    }
+  </div>
+
+  @if (store.hasMore()) {
+    <div class="more">
+      <button class="more__btn" type="button" [disabled]="store.loading()" (click)="store.loadMore()">
+        {{ store.loading() ? 'Cargando…' : 'Cargar más' }}
+      </button>
+    </div>
+  }
+}

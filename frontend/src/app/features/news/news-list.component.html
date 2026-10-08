@@ -1,0 +1,66 @@
+<app-page-header
+  title="Noticias"
+  eyebrow="Google News"
+  icon="Newspaper"
+  description="Artículos del día publicados en medios de habla hispana e inglesa."
+>
+  <app-sync-button source="news" variant="ghost" label="Sincronizar" (synced)="onSynced()" />
+</app-page-header>
+
+<div class="chips">
+  @for (window of windows; track window.value) {
+    <button
+      class="chip"
+      type="button"
+      [class.chip--on]="days() === window.value"
+      (click)="setWindow(window.value)"
+    >
+      Últimos {{ window.label }}
+    </button>
+  }
+</div>
+
+@if (loading()) {
+  <div class="grid">
+    @for (i of [1, 2, 3, 4]; track i) {
+      <app-card-skeleton source="news" />
+    }
+  </div>
+} @else if (error()) {
+  <app-empty-state icon="CircleAlert" title="No se pudieron cargar las noticias" [message]="error()!" />
+} @else if (!items().length) {
+  <app-empty-state
+    icon="Newspaper"
+    title="Sin noticias en este periodo"
+    message="Amplía la ventana de tiempo o pulsa Sincronizar para traer las últimas."
+  />
+} @else {
+  <div class="list">
+    @for (article of items(); track article.id) {
+      <article class="row">
+        <a class="row__link" [routerLink]="['/news', article.id]">
+          <div class="row__body">
+            <div class="row__eyebrow">
+              <span class="medium">{{ article.source_name }}</span>
+              <span class="dot" aria-hidden="true">·</span>
+              <span class="u-meta">{{ article.pub_date | timeAgo }}</span>
+              @if (!article.image_url) {
+                <span class="flag">sin imagen</span>
+              }
+            </div>
+            <h3 class="row__title u-clamp-2">{{ article.title }}</h3>
+          </div>
+          <lucide-icon name="ChevronRight" [size]="16" class="row__chevron" aria-hidden="true" />
+        </a>
+      </article>
+    }
+  </div>
+
+  @if (hasMore()) {
+    <div class="more">
+      <button class="more__btn" type="button" [disabled]="loading()" (click)="resource.loadMore()">
+        Cargar más
+      </button>
+    </div>
+  }
+}

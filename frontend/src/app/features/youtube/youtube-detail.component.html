@@ -1,0 +1,81 @@
+<a class="back" routerLink="/youtube">
+  <lucide-icon name="ArrowLeft" [size]="14" aria-hidden="true" />
+  Volver a YouTube
+</a>
+
+@if (resource.data(); as v) {
+  @if (embedUrl(); as src) {
+    <div class="player">
+      <iframe
+        [src]="src"
+        [title]="videoTitle(v)"
+        allow="accelerometer; clipboard-write; encrypted-media; picture-in-picture"
+        allowfullscreen
+      ></iframe>
+    </div>
+  }
+
+  <h1>{{ v.title }}</h1>
+
+  <div class="meta-row">
+    <span class="u-meta">{{ v.channel }}</span>
+    <span class="dot" aria-hidden="true">·</span>
+    <span class="u-meta">{{ v.published_at | timeAgo }}</span>
+    <span class="dot" aria-hidden="true">·</span>
+    <span class="u-meta">{{ v.duration_seconds | duration }}</span>
+  </div>
+
+  <section class="stats">
+    <div class="stat">
+      <lucide-icon name="Eye" [size]="14" aria-hidden="true" />
+      <span class="stat__value">{{ v.views | compactNumber }}</span>
+      <span class="u-meta">vistas</span>
+    </div>
+    <div class="stat">
+      <lucide-icon name="Star" [size]="14" aria-hidden="true" />
+      <span class="stat__value">{{ v.likes | compactNumber }}</span>
+      <span class="u-meta">likes</span>
+    </div>
+    <div class="stat">
+      <lucide-icon name="Hash" [size]="14" aria-hidden="true" />
+      <span class="stat__value">{{ v.comments | compactNumber }}</span>
+      <span class="u-meta">comentarios</span>
+    </div>
+    <div class="stat">
+      <span class="stat__value">{{ v.language }}</span>
+      <span class="u-meta">idioma</span>
+    </div>
+    <a class="out" [href]="v.url" target="_blank" rel="noopener">
+      Ver en YouTube
+      <lucide-icon name="ExternalLink" [size]="12" aria-hidden="true" />
+    </a>
+  </section>
+
+  <section class="transcript">
+    <div class="transcript__head">
+      <h2>Transcripción</h2>
+      @if (hasTranscript(v.transcript)) {
+        <span class="u-meta">{{ wordCount(v.transcript) }} palabras</span>
+      }
+    </div>
+
+    @if (hasTranscript(v.transcript)) {
+      <p class="transcript__body">{{ v.transcript }}</p>
+    } @else {
+      <p class="u-meta transcript__none">
+        Este video no tiene transcripción disponible. YouTube la habilita a veces después de la
+        publicación; se reintenta en la próxima sincronización.
+      </p>
+    }
+  </section>
+} @else if (resource.error()) {
+  <div class="panel">
+    <lucide-icon name="CircleAlert" [size]="20" aria-hidden="true" />
+    <h2>{{ resource.error() }}</h2>
+    <p class="u-meta">El video puede haberse limpiado de la base o el id no ser válido.</p>
+  </div>
+} @else {
+  <div class="panel">
+    <h2>Cargando…</h2>
+  </div>
+}
