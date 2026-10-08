@@ -1,0 +1,53 @@
+<a class="back" routerLink="/news">
+  <lucide-icon name="ArrowLeft" [size]="14" aria-hidden="true" />
+  Volver a Noticias
+</a>
+
+@if (resource.data(); as a) {
+  <div class="eyebrow">
+    <span class="medium">{{ a.source_name }}</span>
+    <span class="dot" aria-hidden="true">·</span>
+    <time class="u-meta" [attr.datetime]="a.pub_date">{{ a.pub_date | timeAgo }}</time>
+    <span class="dot" aria-hidden="true">·</span>
+    <span class="u-meta">{{ a.language.toUpperCase() }}</span>
+  </div>
+
+  <h1 class="title">{{ a.title }}</h1>
+
+  <div class="actions">
+    <a class="out out--solid" [href]="a.link" target="_blank" rel="noopener">
+      Leer en {{ a.source_name || 'el medio' }}
+      <lucide-icon name="ExternalLink" [size]="12" aria-hidden="true" />
+    </a>
+    @if (sourceLink(a) && sourceLink(a) !== a.link) {
+      <a class="out" [href]="sourceLink(a)" target="_blank" rel="noopener">
+        Portada de {{ a.source_name }}
+      </a>
+    }
+  </div>
+
+  @if (a.content) {
+    <article class="body">{{ a.content }}</article>
+  } @else {
+    <section class="notice">
+      <lucide-icon name="Info" [size]="16" aria-hidden="true" />
+      <div>
+        <h2>Sin texto del artículo</h2>
+        <p>
+          El medio no expone el contenido de forma legible (paywall, JavaScript o bloquea el
+          rastreo). Guardamos el título, el medio y la fecha, y el enlace de arriba abre la nota
+          original.
+        </p>
+      </div>
+    </section>
+  }
+} @else if (resource.error()) {
+  <div class="panel">
+    <lucide-icon name="CircleAlert" [size]="20" aria-hidden="true" />
+    <h2>{{ resource.error() }}</h2>
+  </div>
+} @else {
+  <div class="panel">
+    <h2>Cargando…</h2>
+  </div>
+}

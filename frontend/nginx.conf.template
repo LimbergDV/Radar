@@ -1,0 +1,73 @@
+# nginx del frontend. Sustituido por envsubst al arrancar (ver Dockerfile), asi
+# que ${BACKEND_URL} llega desde las variables del servicio de Railway.
+
+server {
+    listen 80;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # ---------------------------------------------------------------------
+    # Proxy al backend.
+    #
+    # OJO con proxy_pass SIN barra final: el backend expone /api/... y
+    # /health. Con barra, nginx quitaria el prefijo /api/ de la URI y el
+    # backend recibiria /feed en vez de /api/feed (404 en todas).
+    # ---------------------------------------------------------------------
+
+    location /api/ {
+        proxy_pass ${BACKEND_URL};
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # El backend sincroniza scraping de articles y llama a la API de
+        # YouTube, asi que un request puede tardar bastante.
+        proxy_connect_timeout 15s;
+        proxy_read_timeout 180s;
+        proxy_send_timeout 180s;
+    }
+
+    # El frontend hace health-poll a /health (environment.ts quita el sufijo
+    # /api), que vive fuera del prefijo y por eso necesita su propia regla.
+    location = /health {
+        proxy_pass ${BACKEND_URL}/health;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 30s;
+    }
+
+    # ---------------------------------------------------------------------
+    # Estaticos de Angular.
+    # ---------------------------------------------------------------------
+
+    location / {
+        # Rutas de cliente (/feed, /news/:id...). Sin esto, recargar en
+        # /news/abc daria 404 porque no existe ese fichero en disco.
+        try_files $uri $uri/ /index.html;
+    }
+
+    # index.html nunca se cachea: es quien apunta a los bundles con hash. Si se
+    # cachea, un deploy nuevo sigue sirviendo los bundles viejos.
+    location = /index.html {
+        add_header Cache-Control "no-store, must-revalidate";
+    }
+
+    # Los bundles llevan hash en el nombre, asi que pueden cachearse para
+    # siempre sin riesgo de servir una version antigua.
+    location ~* \.(?:js|css|woff2?|png|jpg|jpeg|gif|svg|ico|webp)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+}

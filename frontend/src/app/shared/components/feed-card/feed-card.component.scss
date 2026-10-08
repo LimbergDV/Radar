@@ -1,0 +1,128 @@
+:host {
+  display: block;
+}
+
+.card {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-fog);
+  border-radius: var(--radius-card);
+  transition: background 120ms var(--ease);
+
+  &:hover {
+    background: var(--color-paper);
+  }
+}
+
+.card__link {
+  display: flex;
+  gap: var(--space-16);
+  padding: var(--space-16);
+}
+
+.card__thumb {
+  position: relative;
+  flex: 0 0 88px;
+  height: 88px;
+  border: 1px solid var(--color-fog);
+  border-radius: var(--radius-control);
+  overflow: hidden;
+  background: var(--color-stone);
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+.card__duration {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgb(22 25 28 / 0.82);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.card__avatar {
+  flex: 0 0 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--color-stone);
+  color: var(--color-slate);
+  display: grid;
+  place-items: center;
+  font-weight: var(--weight-semibold);
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+.card__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.card__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin-bottom: var(--space-8);
+}
+
+.card__tagline {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card__dot {
+  color: var(--color-fog);
+  font-size: var(--text-caption);
+}
+
+.card__title {
+  font-size: var(--text-subheading);
+  font-weight: var(--weight-semibold);
+  line-height: 1.38;
+  letter-spacing: var(--tracking-tight);
+  color: var(--color-ink-black);
+}
+
+.card__excerpt {
+  margin-top: var(--space-8);
+  line-height: 1.5;
+}
+
+.card__footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-16);
+  margin-top: var(--space-12);
+}
+
+.card__metric {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--color-slate);
+  font-size: var(--text-caption);
+}
+
+.card__flag,
+.card__topic {
+  padding: 2px 8px;
+  border-radius: var(--radius-control);
+  background: var(--color-paper);
+  color: var(--color-slate);
+  font-size: var(--text-caption);
+}

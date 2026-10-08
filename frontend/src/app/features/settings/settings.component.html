@@ -1,0 +1,209 @@
+<app-page-header
+  title="Configuración"
+  eyebrow="Fuentes"
+  icon="Settings"
+  description="Define qué busca Radar en cada fuente. Los cambios aplican en la próxima sincronización."
+>
+  <app-sync-button variant="ghost" label="Sincronizar todo" (synced)="onSynced()" />
+</app-page-header>
+
+<div class="tabs" role="tablist">
+  <button class="tab" role="tab" [class.tab--on]="tab() === 'youtube'" (click)="setTab('youtube')">
+    <lucide-icon name="Youtube" [size]="14" aria-hidden="true" /> YouTube
+  </button>
+  <button class="tab" role="tab" [class.tab--on]="tab() === 'news'" (click)="setTab('news')">
+    <lucide-icon name="Newspaper" [size]="14" aria-hidden="true" /> Noticias
+  </button>
+  <button class="tab" role="tab" [class.tab--on]="tab() === 'github'" (click)="setTab('github')">
+    <lucide-icon name="Github" [size]="14" aria-hidden="true" /> GitHub
+  </button>
+</div>
+
+@if (tab() === 'youtube') {
+  @if (youtube(); as cfg) {
+    <form class="form" (ngSubmit)="saveYouTube()">
+      <label class="field">
+        <span class="field__label">Palabras clave</span>
+        <input type="text" [ngModel]="ytKeywords()" (ngModelChange)="ytKeywords.set($event)"
+               name="ytKeywords" placeholder="inteligencia artificial, chatgpt, claude" />
+        <span class="field__hint">Separadas por coma. Se buscan junto con el idioma.</span>
+      </label>
+
+      <label class="field">
+        <span class="field__label">Canales</span>
+        <input type="text" [ngModel]="ytChannels()" (ngModelChange)="ytChannels.set($event)"
+               name="ytChannels" placeholder="@midudev, @somospapers" />
+        <span class="field__hint">Handles con &#64;. Si los rellenas, el límite es por canal.</span>
+      </label>
+
+      <div class="row">
+        <label class="field">
+          <span class="field__label">Idiomas</span>
+          <input type="text" [value]="cfg.languages.join(', ')" disabled />
+          <span class="field__hint">Los fija el backend al crear el registro.</span>
+        </label>
+
+        <label class="field">
+          <span class="field__label">Máx. resultados</span>
+          <input type="number" min="1" max="100" [ngModel]="cfg.max_results"
+                 (ngModelChange)="setYouTube({ max_results: +$event })" name="ytMax" />
+        </label>
+      </div>
+
+      <label class="field">
+        <span class="field__label">Antigüedad máxima (días)</span>
+        <input type="number" min="1" max="365" [ngModel]="cfg.days_back"
+               (ngModelChange)="setYouTube({ days_back: +$event })" name="ytDays" />
+        <span class="field__hint">Solo entra lo publicado en los últimos N días. 2 días es lo normal; súbelo si te pierdes contenido entre sincronizaciones.</span>
+      </label>
+
+      <p class="u-meta last">Última sincronización: {{ lastSync(cfg.last_search_at) }}</p>
+
+      <div class="actions">
+        <button class="btn btn--solid" type="submit" [disabled]="saving() !== null">
+          {{ saving() === 'youtube' ? 'Guardando…' : 'Guardar' }}
+        </button>
+        <app-sync-button source="youtube" variant="ghost" label="Guardar y sincronizar" (synced)="onSynced()" />
+      </div>
+    </form>
+  }
+}
+
+@if (tab() === 'news') {
+  @if (news(); as cfg) {
+    <form class="form" (ngSubmit)="saveNews()">
+      <label class="field">
+        <span class="field__label">Consulta</span>
+        <input type="text" [ngModel]="newsKeywords()" (ngModelChange)="newsKeywords.set($event)"
+               name="newsQ" placeholder="Inteligencia Artificial OR IA" />
+        <span class="field__hint">Se envía tal cual al RSS de Google News.</span>
+      </label>
+
+      <div class="row">
+        <label class="field">
+          <span class="field__label">Región / idioma (ceid)</span>
+          <input type="text" [ngModel]="cfg.ceid"
+                 (ngModelChange)="setNews({ ceid: $event })" name="newsCeid" />
+          <span class="field__hint">Varios pares separados por coma activan el feed dual ES/EN.</span>
+        </label>
+
+        <label class="field">
+          <span class="field__label">Ventana de Google</span>
+          <select [ngModel]="cfg.when" (ngModelChange)="setNews({ when: $event })" name="newsWhen">
+            <option value="1h">Última hora</option>
+            <option value="1d">Último día</option>
+            <option value="7d">Última semana</option>
+            <option value="1m">Último mes</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="row">
+        <label class="field">
+          <span class="field__label">Sitio</span>
+          <input type="text" [ngModel]="cfg.site" (ngModelChange)="setNews({ site: $event })"
+                 name="newsSite" placeholder="restringir a un medio" />
+        </label>
+
+        <label class="field">
+          <span class="field__label">En el título</span>
+          <input type="text" [ngModel]="cfg.intitle" (ngModelChange)="setNews({ intitle: $event })"
+                 name="newsIntitle" placeholder="palabra exacta" />
+        </label>
+      </div>
+
+      <div class="row">
+        <label class="field">
+          <span class="field__label">Máx. resultados</span>
+          <input type="number" min="1" max="100" [ngModel]="cfg.max_results"
+                 (ngModelChange)="setNews({ max_results: +$event })" name="newsMax" />
+        </label>
+
+        <label class="field">
+          <span class="field__label">Antigüedad máxima (días)</span>
+          <input type="number" min="0" max="365" [ngModel]="cfg.days_window"
+                 (ngModelChange)="setNews({ days_window: +$event })" name="newsDays" />
+          <span class="field__hint">0 = sin filtro.</span>
+        </label>
+      </div>
+
+      <p class="u-meta last">Última sincronización: {{ lastSync(cfg.last_search_at) }}</p>
+
+      <div class="actions">
+        <button class="btn btn--solid" type="submit" [disabled]="saving() !== null">
+          {{ saving() === 'news' ? 'Guardando…' : 'Guardar' }}
+        </button>
+        <app-sync-button source="news" variant="ghost" label="Guardar y sincronizar" (synced)="onSynced()" />
+      </div>
+    </form>
+  }
+}
+
+@if (tab() === 'github') {
+  @if (github(); as cfg) {
+    <form class="form" (ngSubmit)="saveGitHub()">
+      <label class="field">
+        <span class="field__label">Palabras clave</span>
+        <input type="text" [ngModel]="ghKeywords()" (ngModelChange)="ghKeywords.set($event)"
+               name="ghKeywords" placeholder="openai, claude, langchain" />
+      </label>
+
+      <div class="row">
+        <label class="field">
+          <span class="field__label">Topics</span>
+          <input type="text" [ngModel]="ghTopics()" (ngModelChange)="ghTopics.set($event)"
+                 name="ghTopics" placeholder="ai, llm" />
+        </label>
+
+        <label class="field">
+          <span class="field__label">Lenguajes</span>
+          <input type="text" [ngModel]="ghLanguages()" (ngModelChange)="ghLanguages.set($event)"
+                 name="ghLangs" placeholder="python, typescript" />
+        </label>
+      </div>
+
+      <div class="row">
+        <label class="field">
+          <span class="field__label">Activos en los últimos (días)</span>
+          <input type="number" min="1" max="365" [ngModel]="cfg.days_active"
+                 (ngModelChange)="setGitHub({ days_active: +$event })" name="ghDays" />
+        </label>
+
+        <label class="field">
+          <span class="field__label">Mín. estrellas</span>
+          <input type="number" min="0" [ngModel]="cfg.min_stars"
+                 (ngModelChange)="setGitHub({ min_stars: +$event })" name="ghStars" />
+        </label>
+
+        <label class="field">
+          <span class="field__label">Mín. forks</span>
+          <input type="number" min="0" [ngModel]="cfg.min_forks"
+                 (ngModelChange)="setGitHub({ min_forks: +$event })" name="ghForks" />
+        </label>
+      </div>
+
+      <div class="row">
+        <label class="field">
+          <span class="field__label">Máx. resultados</span>
+          <input type="number" min="1" max="100" [ngModel]="cfg.max_results"
+                 (ngModelChange)="setGitHub({ max_results: +$event })" name="ghMax" />
+        </label>
+
+        <label class="check">
+          <input type="checkbox" [ngModel]="cfg.require_license"
+                 (ngModelChange)="setGitHub({ require_license: $event })" name="ghLicense" />
+          <span>Exigir licencia</span>
+        </label>
+      </div>
+
+      <p class="u-meta last">Última sincronización: {{ lastSync(cfg.last_search_at) }}</p>
+
+      <div class="actions">
+        <button class="btn btn--solid" type="submit" [disabled]="saving() !== null">
+          {{ saving() === 'github' ? 'Guardando…' : 'Guardar' }}
+        </button>
+        <app-sync-button source="github" variant="ghost" label="Guardar y sincronizar" (synced)="onSynced()" />
+      </div>
+    </form>
+  }
+}

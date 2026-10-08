@@ -1,0 +1,91 @@
+<a class="back" routerLink="/github">
+  <lucide-icon name="ArrowLeft" [size]="14" aria-hidden="true" />
+  Volver a GitHub
+</a>
+
+@if (resource.data(); as r) {
+  <div class="top">
+    <div class="avatar" aria-hidden="true">
+      @if (r.owner_avatar_url) {
+        <img [src]="r.owner_avatar_url" alt="" />
+      } @else {
+        {{ r.full_name.charAt(0).toUpperCase() }}
+      }
+    </div>
+
+    <div class="top__id">
+      <h1 class="top__name">{{ r.full_name }}</h1>
+      <p class="u-meta top__desc">{{ r.description || 'Sin descripción.' }}</p>
+    </div>
+
+    <a class="out out--solid" [href]="r.html_url" target="_blank" rel="noopener">
+      Abrir en GitHub
+      <lucide-icon name="ExternalLink" [size]="12" aria-hidden="true" />
+    </a>
+  </div>
+
+  @if (r.topics.length) {
+    <div class="topics">
+      @for (topic of r.topics; track topic) {
+        <span class="topic">{{ topic }}</span>
+      }
+    </div>
+  }
+
+  <section class="stats">
+    <div class="stat">
+      <lucide-icon name="Star" [size]="14" aria-hidden="true" />
+      <span class="stat__value">{{ r.stargazers_count | compactNumber }}</span>
+      <span class="u-meta">estrellas</span>
+    </div>
+    <div class="stat">
+      <lucide-icon name="GitFork" [size]="14" aria-hidden="true" />
+      <span class="stat__value">{{ r.forks_count | compactNumber }}</span>
+      <span class="u-meta">forks</span>
+    </div>
+    <div class="stat">
+      <lucide-icon name="CircleAlert" [size]="14" aria-hidden="true" />
+      <span class="stat__value">{{ r.open_issues_count | compactNumber }}</span>
+      <span class="u-meta">issues</span>
+    </div>
+    <div class="stat">
+      <lucide-icon name="Users" [size]="14" aria-hidden="true" />
+      <span class="stat__value">{{ r.watchers_count | compactNumber }}</span>
+      <span class="u-meta">watchers</span>
+    </div>
+    <div class="stat">
+      <lucide-icon name="Activity" [size]="14" aria-hidden="true" />
+      <span class="stat__value">{{ r.updated_at | timeAgo }}</span>
+      <span class="u-meta">actualizado</span>
+    </div>
+    @if (r.license) {
+      <div class="stat">
+        <lucide-icon name="FileText" [size]="14" aria-hidden="true" />
+        <span class="stat__value">{{ r.license }}</span>
+        <span class="u-meta">licencia</span>
+      </div>
+    }
+  </section>
+
+  <section class="readme">
+    <div class="readme__head">
+      <h2>README</h2>
+      <span class="u-meta">{{ r.default_branch }} · {{ r.size_kb }} KB</span>
+    </div>
+
+    @if (readmeOf(r); as readme) {
+      <pre class="readme__body"><code [innerHTML]="readme"></code></pre>
+    } @else {
+      <p class="u-meta">Este repositorio no tiene README.</p>
+    }
+  </section>
+} @else if (resource.error()) {
+  <div class="panel">
+    <lucide-icon name="CircleAlert" [size]="20" aria-hidden="true" />
+    <h2>{{ resource.error() }}</h2>
+  </div>
+} @else {
+  <div class="panel">
+    <h2>Cargando…</h2>
+  </div>
+}
