@@ -1,8 +1,8 @@
 # Imagen del backend para Railway.
 #
 # Railway detecta el Dockerfile automaticamente en el Root Directory del
-# servicio (backend/). El servicio debe escuchar en 0.0.0.0 y en $PORT, que
-# Railway inyecta por entorno.
+# servicio (backend/). El servicio debe escuchar en :: (todas las interfaces
+# IPv4 e IPv6) y en $PORT, que Railway inyecta por entorno.
 
 FROM python:3.12-slim
 
@@ -29,5 +29,9 @@ EXPOSE 8000
 # paralelo y convendria moverlo a un job de release.
 #
 # --proxy-headers hace que uvicorn confíe en X-Forwarded-* y req.url.app sea el
-# dominio publico, no 0.0.0.0.
-CMD ["sh", "-c", "alembic upgrade head && exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips='*'"]
+# dominio publico, no el host interno.
+#
+# --host :: hace que uvicorn escuche en todas las interfaces IPv4 e IPv6 (y en
+# $PORT). La red privada de Railway resuelve los servicios a direcciones IPv6,
+# asi que con 0.0.0.0 (solo IPv4) las conexiones desde otros servicios caducan.
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn main:app --host :: --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips='*'"]
