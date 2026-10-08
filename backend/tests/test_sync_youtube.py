@@ -5,12 +5,20 @@ vivian dentro del fetcher sin test y de los que dependia que el feed no se
 llenara de Shorts de 30 segundos.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 import pytest
 
 from src.core.entities.config import YouTubeConfig
 from src.core.use_cases import sync_youtube as uc
+from src.core.use_cases.sync_youtube import YouTubeApiError
+from src.core.use_cases.update_source_config import YouTubeConfigError
+from src.infrastructure.external.youtube_api import YouTubeFetcher, sync_pipeline
+
+
+def _parse_iso(value: str) -> datetime:
+    return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
 
 NOW = datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
 
@@ -112,6 +120,129 @@ def test_select_with_limits_per_channel_when_channels_configured():
         channel = item["snippet"]["channelId"]
         per_channel[channel] = per_channel.get(channel, 0) + 1
     assert per_channel == {"UC1": 2, "UC2": 2}
+
+@pytest.mark.asyncio
+async def test_pipeline_rejects_config_without_search_targets():
+    """Sin keywords ni canales no se debe reportar un sync 'exitoso' vacio."""
+    with pytest.raises(YouTubeConfigError):
+        await sync_pipeline(YouTubeConfig(keywords=[], channel_ids=[]), "key")
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("days_back", [1, 2, 7, 30])
+async def test_search_uses_configured_days_back(monkeypatch, days_back):
+    """La ventana de antiguedad sale de la config, no de una constante en el codigo."""
+    captured = _install_fake_client(monkeypatch, status=200)
+
+    config = YouTubeConfig(keywords=["ia"], languages=["es"], days_back=days_back)
+    await YouTubeFetcher(api_key="key")._fetch_search_candidates(config, [])
+
+    assert captured.params, "no se hizo ninguna peticion de busqueda"
+    expected = (
+        datetime.now(timezone.utc) - timedelta(days=days_back)
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    for params in captured.params:
+        # Tolerancia de 1s: el test puede cruzar el cambio de segundo.
+        drift = abs(_parse_iso(params["publishedAfter"]) - _parse_iso(expected))
+        assert drift <= timedelta(seconds=1)
+
+@pytest.mark.asyncio
+async def test_search_makes_one_request_per_keyword_and_language(monkeypatch):
+    """Regresion: las keywords se unian con '|' y YouTube lo leia como texto.
+
+    Una sola consulta devolvia 2 resultados frente a 187 con una por keyword.
+    """
+    captured = _install_fake_client(monkeypatch, status=200)
+
+    config = YouTubeConfig(keywords=["ia", "ml", "claude"], languages=["es", "en"])
+    await YouTubeFetcher(api_key="key")._fetch_search_candidates(config, [])
+
+    assert len(captured.params) == 6  # 3 keywords x 2 idiomas
+    queries = {p["q"] for p in captured.params}
+    assert queries == {"ia -shorts -#shorts", "ml -shorts -#shorts", "claude -shorts -#shorts"}
+    assert not any("|" in q for q in queries)
+
+@pytest.mark.asyncio
+async def test_search_raises_when_every_request_fails_with_quota(monkeypatch):
+    """Cuota agotada no es 'no hay nada nuevo': hay que reportarlo."""
+    captured = _install_fake_client(
+        monkeypatch,
+        status=403,
+        text='{"error": {"errors": [{"reason": "quotaExceeded"}]}}',
+    )
+
+    config = YouTubeConfig(keywords=["ia"], languages=["es"])
+    with pytest.raises(YouTubeApiError, match="cuota"):
+        await YouTubeFetcher(api_key="key")._fetch_search_candidates(config, [])
+
+@pytest.mark.asyncio
+async def test_search_quota_error_suggests_reducing_usage(monkeypatch):
+    captured = _install_fake_client(
+        monkeypatch, status=403, text='{"error":{"reason":"quotaExceeded"}}'
+    )
+    config = YouTubeConfig(keywords=["ia"], languages=["es"])
+    with pytest.raises(YouTubeApiError, match="SYNC_INTERVAL_MINUTES"):
+        await YouTubeFetcher(api_key="key")._fetch_search_candidates(config, [])
+
+@pytest.mark.asyncio
+async def test_search_invalid_key_does_not_blame_quota(monkeypatch):
+    """La API responde 400 para una key mala: el consejo debe ser el correcto."""
+    captured = _install_fake_client(
+        monkeypatch, status=400, text='{"error":{"message":"API key not valid."}}'
+    )
+    config = YouTubeConfig(keywords=["ia"], languages=["es"])
+
+    with pytest.raises(YouTubeApiError) as excinfo:
+        await YouTubeFetcher(api_key="key")._fetch_search_candidates(config, [])
+
+    message = str(excinfo.value)
+    assert "API key invalida" in message
+    assert "SYNC_INTERVAL_MINUTES" not in message
+
+@pytest.mark.asyncio
+async def test_search_tolerates_partial_failures(monkeypatch):
+    """Si solo falla alguna.keyword, se sigue con el resto."""
+    captured = _install_fake_client(
+        monkeypatch,
+        status=200,
+        fail_indexes={0},
+        fail_status=500,
+    )
+
+    config = YouTubeConfig(keywords=["ia", "ml"], languages=["es"])
+    result = await YouTubeFetcher(api_key="key")._fetch_search_candidates(config, [])
+
+    assert isinstance(result, list)
+
+def _install_fake_client(monkeypatch, *, status: int, text: str = "", fail_indexes=None, fail_status: int = 500):
+    """Instala un cliente httpx falso y devuelve el registro de peticiones."""
+    captured = SimpleNamespace(params=[], urls=[])
+    failures = set(fail_indexes or ())
+
+    class _FakeResponse:
+        def __init__(self, status_code: int, body: str = ""):
+            self.status_code = status_code
+            self.text = body
+
+        def json(self) -> dict:
+            return {"items": []}
+
+    class _FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def get(self, url, params=None, **kwargs):
+            index = len(captured.params)
+            captured.params.append(params or {})
+            captured.urls.append(url)
+            if index in failures:
+                return _FakeResponse(fail_status, "boom")
+            return _FakeResponse(status, text)
+
+    monkeypatch.setattr(YouTubeFetcher, "_client", lambda self: _FakeClient())
+    return captured
 
 def _full_item() -> dict:
     return {

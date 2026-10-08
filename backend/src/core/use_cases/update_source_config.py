@@ -13,6 +13,20 @@ MIN_RESULTS_FLOOR = 1
 
 VALID_WHEN_VALUES = {"1h", "1d", "7d", "1w", "1m", "1y", ""}
 
+# Ventana de antiguedad por defecto en YouTube. El scheduler corre cada hora,
+# asi que 2 dias cubren de sobra una pasada fallida sin traer contenido viejo.
+DEFAULT_DAYS_BACK = 2
+MAX_DAYS_WINDOW = 365
+
+
+class YouTubeConfigError(ValueError):
+    """La configuracion de YouTube no permite sincronizar nada.
+
+    Hereda de ValueError porque para el resto de la app "config invalida" ya
+    significa eso; el service la traduce a YouTubeServiceError (HTTP 502) para
+    que la UI muestre un toast util en vez de un fallo generico.
+    """
+
 
 def _clean_list(values: list[str] | None, *, limit: int = 30) -> list[str]:
     """Quita vacios/duplicados y recorta, preservando el orden."""
@@ -42,12 +56,30 @@ def _clamp(value: int | None, default: int, minimum: int, maximum: int) -> int:
 
 
 def validate_youtube_config(config: YouTubeConfig) -> YouTubeConfig:
-    """Normaliza keywords, canales, idiomas y el limite de resultados."""
+    """Normaliza keywords, canales, idiomas, limite de resultados y antiguedad."""
     config.keywords = _clean_list(config.keywords)
     config.channel_ids = _clean_list(config.channel_ids)
     config.languages = _clean_list(config.languages) or ["es", "en"]
     config.max_results = _clamp(config.max_results, 5, 1, MAX_RESULTS_CEILING)
+    config.days_back = _clamp(config.days_back, DEFAULT_DAYS_BACK, 1, MAX_DAYS_WINDOW)
     return config
+
+
+def ensure_youtube_searchable(config: YouTubeConfig) -> None:
+    """Falla si la config no tiene ningun objetivo de busqueda.
+
+    Sin keywords ni canales, el pipeline no construye ni una sola peticion a la
+    API y devolvia un sync 'exitoso' con 0 videos. Desde Configuracion se puede
+    dejar la fuente vacia sin querer, y eso es un error de setup, no un feed
+    vacio: hay que decirlo.
+    """
+    if config.keywords or config.channel_ids:
+        return
+
+    raise YouTubeConfigError(
+        "YouTube no tiene nada que buscar: define al menos una palabra clave "
+        "o un canal en Configuración."
+    )
 
 
 def validate_google_news_config(config: GoogleNewsConfig) -> GoogleNewsConfig:

@@ -7,6 +7,8 @@ export interface YouTubeConfig {
   channel_ids: string[];
   languages: string[];
   max_results: number;
+  /** Ventana de antigüedad en días: solo entra lo publicado en los últimos N días. */
+  days_back: number;
   last_search_at: string | null;
 }
 

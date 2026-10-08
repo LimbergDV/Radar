@@ -47,6 +47,7 @@ class YouTubeConfigModel(Base):
     channel_ids: Mapped[list] = mapped_column(JSONB, default=list)
     languages: Mapped[list] = mapped_column(JSONB, default=lambda: ["es", "en"])
     max_results: Mapped[int] = mapped_column(Integer, default=5)
+    days_back: Mapped[int] = mapped_column(Integer, default=2)
     last_search_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 

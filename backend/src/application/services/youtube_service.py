@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.entities.youtube import YouTubeVideo
 from src.core.logging_config import get_logger
+from src.core.use_cases.sync_youtube import YouTubeApiError
+from src.core.use_cases.update_source_config import YouTubeConfigError
 from src.infrastructure.database.repositories.youtube_pg_repo import YouTubeRepository
 from src.infrastructure.database.settings import settings
 from src.infrastructure.external.youtube_api import sync_pipeline
@@ -33,6 +35,16 @@ class YouTubeService:
 
         try:
             new_videos: list[YouTubeVideo] = await sync_pipeline(config, settings.youtube_api_key)
+        except YouTubeConfigError as exc:
+            # Config sin objetivos de busqueda. No es un fallo de la API de
+            # YouTube sino de setup, y el usuario tiene que poder leerlo.
+            logger.warning("Sincronizacion de YouTube cancelada: %s", exc)
+            raise YouTubeServiceError(str(exc)) from exc
+        except YouTubeApiError as exc:
+            # Cuota/credenciales/red. Sin esto el sync devolveria 'exitoso' con 0
+            # videos y pareceria que no hay contenido nuevo.
+            logger.error("Fallo la API de YouTube: %s", exc)
+            raise YouTubeServiceError(str(exc)) from exc
         except ValueError:
             raise
         except Exception as exc:  # noqa: BLE001 - queremos un 502, no un 500 crudo

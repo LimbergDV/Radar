@@ -8,6 +8,9 @@ class YouTubeConfig:
     channel_ids: list[str] = field(default_factory=list)
     languages: list[str] = field(default_factory=lambda: ["es", "en"])
     max_results: int = 5
+    # Ventana de antiguedad en dias para el sync. El scheduler corre cada hora,
+    # asi que 2 dias dan margen para no perder nada si una pasada falla.
+    days_back: int = 2
     last_search_at: datetime | None = None
 
 

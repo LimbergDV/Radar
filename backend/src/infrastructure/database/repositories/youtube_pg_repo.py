@@ -18,6 +18,22 @@ CONFIG_ID = 1
 NO_TRANSCRIPT = "Transcripción no disponible"
 
 
+def _to_config_entity(model: YouTubeConfigModel) -> YouTubeConfig:
+    """Proyecta el modelo de configuracion a la entidad de dominio.
+
+    `get_config` y `update_config` devuelven las dos la misma entidad; duplicar
+    el mapeo hacia que se desincronicen al anadir un campo.
+    """
+    return YouTubeConfig(
+        keywords=list(model.keywords or []),
+        channel_ids=list(model.channel_ids or []),
+        languages=list(model.languages or []),
+        max_results=model.max_results,
+        days_back=model.days_back,
+        last_search_at=model.last_search_at,
+    )
+
+
 def _to_entity(model: YouTubeVideoModel) -> YouTubeVideo:
     return YouTubeVideo(
         id=model.id,
@@ -133,14 +149,7 @@ class YouTubeRepository(YouTubeRepositoryBase):
         return model
 
     async def get_config(self) -> YouTubeConfig:
-        model = await self._get_config_model()
-        return YouTubeConfig(
-            keywords=list(model.keywords or []),
-            channel_ids=list(model.channel_ids or []),
-            languages=list(model.languages or []),
-            max_results=model.max_results,
-            last_search_at=model.last_search_at,
-        )
+        return _to_config_entity(await self._get_config_model())
 
     async def update_config(self, config: YouTubeConfig) -> YouTubeConfig:
         config = validate_youtube_config(config)
@@ -150,16 +159,11 @@ class YouTubeRepository(YouTubeRepositoryBase):
         model.channel_ids = config.channel_ids
         model.languages = config.languages
         model.max_results = config.max_results
+        model.days_back = config.days_back
         model.last_search_at = config.last_search_at
         model.updated_at = datetime.now(timezone.utc)
 
         await self.session.commit()
         await self.session.refresh(model)
 
-        return YouTubeConfig(
-            keywords=list(model.keywords or []),
-            channel_ids=list(model.channel_ids or []),
-            languages=list(model.languages or []),
-            max_results=model.max_results,
-            last_search_at=model.last_search_at,
-        )
+        return _to_config_entity(model)

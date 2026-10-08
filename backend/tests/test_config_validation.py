@@ -7,9 +7,13 @@ sincronizacion (y retrasando el auto-sync).
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from src.core.entities.config import GitHubConfig, GoogleNewsConfig, YouTubeConfig
 from src.core.use_cases.update_source_config import (
+    YouTubeConfigError,
     config_to_dict,
+    ensure_youtube_searchable,
     needs_initial_sync,
     validate_github_config,
     validate_google_news_config,
@@ -36,6 +40,27 @@ def test_validate_youtube_handles_none_max_results():
     config = YouTubeConfig()
     config.max_results = None  # type: ignore[assignment]
     assert validate_youtube_config(config).max_results == 5
+
+def test_validate_youtube_clamps_days_back():
+    assert validate_youtube_config(YouTubeConfig(days_back=9999)).days_back == 365
+    assert validate_youtube_config(YouTubeConfig(days_back=0)).days_back == 1
+
+def test_validate_youtube_defaults_days_back():
+    config = YouTubeConfig()
+    config.days_back = None  # type: ignore[assignment]
+    assert validate_youtube_config(config).days_back == 2
+
+def test_ensure_youtube_searchable_accepts_keywords_only():
+    ensure_youtube_searchable(YouTubeConfig(keywords=["ia"], channel_ids=[]))
+
+def test_ensure_youtube_searchable_accepts_channels_only():
+    ensure_youtube_searchable(YouTubeConfig(keywords=[], channel_ids=["@midudev"]))
+
+def test_ensure_youtube_searchable_rejects_empty_config():
+    # Sin esto el pipeline no hacia ninguna peticion y devolvia un sync
+    # 'exitoso' con 0 videos, que en la UI parece un fallo de YouTube.
+    with pytest.raises(YouTubeConfigError):
+        ensure_youtube_searchable(YouTubeConfig(keywords=[], channel_ids=[]))
 
 def test_validate_news_derives_ceid_when_missing():
     config = validate_google_news_config(GoogleNewsConfig(hl="en-US", gl="US", ceid=""))

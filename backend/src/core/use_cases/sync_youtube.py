@@ -21,6 +21,15 @@ MIN_DURATION_SECONDS = 120  # por debajo de esto es un Short
 _DURATION_REGEX = re.compile(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?')
 
 
+class YouTubeApiError(Exception):
+    """La API de YouTube rechazo TODAS las peticiones de una tanda.
+
+    Se distingue de un feed simplemente vacio: si no hubo ni una respuesta
+    utilizable, la causa es cuota agotada, API key invalida o red caída, y hay
+    que reportarla en vez de devolver 0 items con un 'exito'.
+    """
+
+
 def parse_duration(iso_duration: str) -> int:
     """Convierte una duracion ISO-8601 de YouTube ('PT1H2M3S') a segundos."""
     if not iso_duration:

@@ -39,6 +39,7 @@ class YouTubeConfigResponse(BaseModel):
     channel_ids: list[str]
     languages: list[str]
     max_results: int
+    days_back: int
     last_search_at: datetime | None = None
 
 
@@ -47,6 +48,7 @@ class YouTubeConfigUpdate(BaseModel):
     channel_ids: list[str] = Field(default_factory=list, max_length=50)
     languages: list[str] = Field(default_factory=lambda: ["es", "en"], max_length=10)
     max_results: int = Field(default=5, ge=1, le=100)
+    days_back: int = Field(default=2, ge=1, le=365)
 
 
 class SyncResponse(BaseModel):

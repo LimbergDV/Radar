@@ -66,6 +66,7 @@ async def update_youtube_config(
     current.channel_ids = payload.channel_ids
     current.languages = payload.languages
     current.max_results = payload.max_results
+    current.days_back = payload.days_back
 
     saved = await service.update_config(current)
     return YouTubeConfigResponse(**vars(saved))

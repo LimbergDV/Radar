@@ -14,6 +14,8 @@ from src.core.entities.config import YouTubeConfig
 from src.core.entities.youtube import YouTubeVideo
 from src.core.logging_config import get_logger
 from src.core.use_cases import sync_youtube as uc
+from src.core.use_cases.sync_youtube import YouTubeApiError
+from src.core.use_cases.update_source_config import ensure_youtube_searchable
 
 logger = get_logger(__name__)
 
@@ -21,8 +23,45 @@ REQUEST_TIMEOUT = 30.0
 # 50 de 100: deja margen al filtro de idioma/Shorts.
 SEARCH_MAX_RESULTS = 50
 ENRICH_BATCH_SIZE = 50
-DAYS_BACK = 2
 NO_TRANSCRIPT = "Transcripción no disponible"
+# search.list cuesta 100 unidades contra la cuota diaria de 10.000; videos.list,
+# 1. Se loguea porque el numero de peticiones depende de la config del usuario.
+SEARCH_UNIT_COST = 100
+
+
+def _describe_api_error(response) -> str:
+    """Traduce un error de la API de YouTube a algo accionable.
+
+    Se mira el cuerpo ANTES que el status: una API key invalida responde 400
+    (no 403) con 'API key not valid', asi que un mapeo por status suelto
+    acabaria recomendando tocar la cuota cuando el problema es la credencial.
+    """
+    status = response.status_code
+    lowered = (response.text or "")[:400].lower()
+
+    if "quotaexceeded" in lowered or "quota" in lowered:
+        return "cuota diaria agotada"
+    if "apikeynotvalid" in lowered or "api key not valid" in lowered:
+        return "API key invalida"
+    if "accessnotconfigured" in lowered:
+        return "YouTube Data API v3 no habilitada en el proyecto"
+    if "forbidden" in lowered:
+        return "prohibido (403)"
+
+    if status == 429:
+        return "429 demasiadas peticiones"
+    if status in (400, 401, 403):
+        return f"HTTP {status}"
+    return f"HTTP {status}"
+
+
+def _quota_hint(detail: str) -> str:
+    """El consejo depende de la causa: tocar la cuota no arregla una key mala."""
+    if "cuota" in detail:
+        return " Sube SYNC_INTERVAL_MINUTES o quita keywords para gastar menos."
+    if "API key" in detail:
+        return " Revisa YOUTUBE_API_KEY en el .env."
+    return ""
 
 
 class YouTubeFetcher:
@@ -74,12 +113,17 @@ class YouTubeFetcher:
         config: YouTubeConfig,
         channel_ids: list[str],
     ) -> list[dict]:
-        """Busqueda concurrente por canal y por keyword/idioma."""
-        query = " | ".join(config.keywords) if config.keywords else ""
-        query = f"{query} -shorts -#shorts" if query else "-shorts -#shorts"
+        """Busqueda concurrente por canal y por keyword/idioma.
 
+        OJO: una peticion POR KEYWORD, no una con las keywords unidas por '|'.
+        YouTube no interpreta '|' como OR: lo trata como texto literal y una
+        consulta como "ia | ml | chatgpt -shorts" devuelve casi nada (2 hits
+        medidos, frente a 187 con una peticion por keyword). El coste es que
+        search.list vale 100 unidades por peticion, asi que el numero de
+        keywords por idioma es el que manda en la cuota diaria.
+        """
         published_after = (
-            datetime.now(timezone.utc) - timedelta(days=DAYS_BACK)
+            datetime.now(timezone.utc) - timedelta(days=max(1, config.days_back))
         ).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         requests_to_make: list[dict] = []
@@ -94,14 +138,15 @@ class YouTubeFetcher:
                 "channelId": channel_id,
             })
 
-        if config.keywords:
+        for keyword in config.keywords:
             for language in (config.languages or ["any"]):
                 params = {
                     "part": "snippet",
-                    "q": query,
+                    "q": f"{keyword} -shorts -#shorts",
                     "type": "video",
                     "maxResults": SEARCH_MAX_RESULTS,
                     "order": "date",
+                    "publishedAfter": published_after,
                 }
                 if language != "any":
                     params["relevanceLanguage"] = language
@@ -110,6 +155,17 @@ class YouTubeFetcher:
 
         if not requests_to_make:
             return []
+
+        logger.info(
+            "YouTube: %d busquedas (%d keywords x %d idiomas + %d canales), "
+            "ventana %d dias (~%d unidades de cuota)",
+            len(requests_to_make),
+            len(config.keywords),
+            len(config.languages or []),
+            len(channel_ids),
+            max(1, config.days_back),
+            len(requests_to_make) * SEARCH_UNIT_COST,
+        )
 
         async with self._client() as client:
             responses = await asyncio.gather(
@@ -120,13 +176,16 @@ class YouTubeFetcher:
 
         items: list[dict] = []
         seen_ids: set[str] = set()
+        failures: list[str] = []
 
         for response in responses:
             if isinstance(response, Exception):
                 logger.warning("Excepcion en busqueda de YouTube: %s", response)
+                failures.append(type(response).__name__)
                 continue
             if response.status_code != 200:
                 logger.warning("YouTube API devolvio %s: %s", response.status_code, response.text[:200])
+                failures.append(_describe_api_error(response))
                 continue
 
             for item in response.json().get("items", []):
@@ -134,6 +193,16 @@ class YouTubeFetcher:
                 if video_id and video_id not in seen_ids:
                     seen_ids.add(video_id)
                     items.append(item)
+
+        # Si TODAS las peticiones fallaron, no es "no hay nada nuevo": la causa
+        # hay que decirla. Sin esto, agotar la cuota devolvia un sync 'exitoso'
+        # con 0 videos, igual que pasaba con la config vacia.
+        if responses and len(failures) == len(responses):
+            detail = ", ".join(sorted(set(failures)))
+            raise YouTubeApiError(
+                f"La API de YouTube no devolvió nada en ninguna de las "
+                f"{len(responses)} búsquedas ({detail}).{_quota_hint(detail)}"
+            )
 
         items.sort(key=lambda x: (x.get("snippet") or {}).get("publishedAt", ""), reverse=True)
         logger.info("YouTube: %d candidatos unicos", len(items))
@@ -262,6 +331,10 @@ def fetch_transcript(video_id: str, languages: list[str]) -> tuple[str, str | No
 
 async def sync_pipeline(config: YouTubeConfig, api_key: str) -> list[YouTubeVideo]:
     """Ejecuta el pipeline completo y devuelve los videos listos para guardar."""
+    # Antes de gastar cuota ni tiempo: si no hay nada que buscar, esto no es un
+    # feed vacio sino una config sin configurar.
+    ensure_youtube_searchable(config)
+
     fetcher = YouTubeFetcher(api_key=api_key)
 
     channel_ids = await fetcher._resolve_channel_handles(config.channel_ids)

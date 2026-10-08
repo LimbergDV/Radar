@@ -50,6 +50,13 @@
         </label>
       </div>
 
+      <label class="field">
+        <span class="field__label">Antigüedad máxima (días)</span>
+        <input type="number" min="1" max="365" [ngModel]="cfg.days_back"
+               (ngModelChange)="setYouTube({ days_back: +$event })" name="ytDays" />
+        <span class="field__hint">Solo entra lo publicado en los últimos N días. 2 días es lo normal; súbelo si te pierdes contenido entre sincronizaciones.</span>
+      </label>
+
       <p class="u-meta last">Última sincronización: {{ lastSync(cfg.last_search_at) }}</p>
 
       <div class="actions">

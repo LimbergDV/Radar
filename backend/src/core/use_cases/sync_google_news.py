@@ -175,16 +175,25 @@ def deduplicate(articles: list[GoogleNewsArticle]) -> list[GoogleNewsArticle]:
     return unique
 
 
-def filter_by_window(articles: list[GoogleNewsArticle], days: int) -> list[GoogleNewsArticle]:
+def filter_by_window(
+    articles: list[GoogleNewsArticle],
+    days: int,
+    now: datetime | None = None,
+) -> list[GoogleNewsArticle]:
     """Deja solo lo publicado dentro de la ventana de `days` dias.
 
     Es el filtro "de ese dia" que pide el producto: descarta articles viejos que
     Google News sigue sirviendo en el feed.
+
+    `now` es inyectable para que los tests no dependan del reloj: con
+    `datetime.now()` aqui dentro, cualquier test con fechas fijas deja de
+    funcionar solo al pasar el tiempo.
     """
     if days <= 0:
         return articles
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    reference = now or datetime.now(timezone.utc)
+    cutoff = reference - timedelta(days=days)
     return [a for a in articles if a.pub_date >= cutoff]
 
 

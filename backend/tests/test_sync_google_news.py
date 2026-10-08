@@ -144,20 +144,20 @@ def test_filter_by_window_keeps_today():
     entry = _entry("https://n.com/a")
     entry["published"] = "Sun, 05 Oct 2026 11:00:00 GMT"
     articles = [uc.build_article(entry, "es", NOW)]
-    assert len(uc.filter_by_window(articles, 1)) == 1
+    assert len(uc.filter_by_window(articles, 1, now=NOW)) == 1
 
 def test_filter_by_window_drops_old_articles():
     """El filtro 'de ese dia': Google re-sirve articulos viejos, hay que quitarlos."""
     entry = _entry("https://n.com/a")
     entry["published"] = "Sun, 20 Sep 2026 11:00:00 GMT"  # 15 dias atras
     articles = [uc.build_article(entry, "es", NOW)]
-    assert uc.filter_by_window(articles, 1) == []
+    assert uc.filter_by_window(articles, 1, now=NOW) == []
 
 def test_filter_by_window_zero_disables_filter():
     entry = _entry("https://n.com/a")
     entry["published"] = "Sun, 20 Sep 2026 11:00:00 GMT"
     articles = [uc.build_article(entry, "es", NOW)]
-    assert len(uc.filter_by_window(articles, 0)) == 1
+    assert len(uc.filter_by_window(articles, 0, now=NOW)) == 1
 
 def test_should_fetch_content_false_for_google_link():
     """Las paginas splash de Google no contienen el articulo."""
