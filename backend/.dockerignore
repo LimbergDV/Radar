@@ -1,0 +1,16 @@
+# No enviar esto a la imagen: son artefactos de desarrollo y casi duplican el
+# tamano del build context, que es lo que mas ralentiza el deploy.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+tests/
+.env
+.env.*
+!.env.example
+alembic/__pycache__/
+*.log
+.DS_Store
+Dockerfile
+.dockerignore

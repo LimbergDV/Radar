@@ -63,41 +63,53 @@ def _decode_legacy_payload(token: str) -> str | None:
     return None
 
 
-def _decode_via_batchexecute(client: httpx.Client, token: str) -> str | None:
-    """RPC actual de Google: pide la URL real usando la firma de la pagina."""
+def _decode_via_batchexecute(token: str) -> str | None:
+    """RPC actual de Google: pide la URL real usando la firma de la pagina.
+
+    Se abre su propio `httpx.Client` sincrono a proposito: esta funcion corre en
+    un thread (`asyncio.to_thread`), asi que no puede usar el cliente asincrono
+    que le pasa `resolve_real_url`. Antes se recibia ese cliente asincrono aqui y
+    `page.status_code` reventaba con AttributeError sobre una corrutina, o sea
+    que este decoder nunca funciono.
+    """
     try:
-        page = client.get(f"https://news.google.com/rss/articles/{token}")
-        if page.status_code != 200:
-            return None
+        with httpx.Client(
+            headers={"User-Agent": _USER_AGENT},
+            timeout=_TIMEOUT,
+            follow_redirects=True,
+        ) as client:
+            page = client.get(f"https://news.google.com/rss/articles/{token}")
+            if page.status_code != 200:
+                return None
 
-        signature = _SIG_RE.search(page.text)
-        timestamp = _TS_RE.search(page.text)
-        if not signature or not timestamp:
-            return None
+            signature = _SIG_RE.search(page.text)
+            timestamp = _TS_RE.search(page.text)
+            if not signature or not timestamp:
+                return None
 
-        inner = json.dumps([
-            "garturlreq",
-            [
+            inner = json.dumps([
+                "garturlreq",
                 [
-                    "X", "X", ["X"], None, None, 1, 1, "X", None, 1,
-                    None, None, None, None, None, 0, None, None,
-                    [int(timestamp.group(1)), signature.group(1)],
+                    [
+                        "X", "X", ["X"], None, None, 1, 1, "X", None, 1,
+                        None, None, None, None, None, 0, None, None,
+                        [int(timestamp.group(1)), signature.group(1)],
+                    ],
+                    "X", "X", 1, [1, 2, 3], 1, 0, "655000234", 0, 0, None, 0,
                 ],
-                "X", "X", 1, [1, 2, 3], 1, 0, "655000234", 0, 0, None, 0,
-            ],
-            token,
-        ])
-        payload = json.dumps([[["Fbv4je", inner, None, "generic"]]])
+                token,
+            ])
+            payload = json.dumps([[["Fbv4je", inner, None, "generic"]]])
 
-        response = client.post(
-            _BATCHEXECUTE_URL,
-            data={"f.req": payload},
-            headers={
-                "content-type": "application/x-www-form-urlencoded;charset=UTF-8",
-                "referer": f"https://news.google.com/rss/articles/{token}",
-                "origin": "https://news.google.com",
-            },
-        )
+            response = client.post(
+                _BATCHEXECUTE_URL,
+                data={"f.req": payload},
+                headers={
+                    "content-type": "application/x-www-form-urlencoded;charset=UTF-8",
+                    "referer": f"https://news.google.com/rss/articles/{token}",
+                    "origin": "https://news.google.com",
+                },
+            )
 
         # La respuesta viene en marcos separados por doble salto de linea.
         for chunk in response.text.split("\n\n"):
@@ -126,7 +138,12 @@ async def resolve_real_url(
     google_news_url: str,
     client: httpx.AsyncClient | None = None,
 ) -> str | None:
-    """Devuelve la URL real del medio, o None si no se pudo resolver."""
+    """Devuelve la URL real del medio, o None si no se pudo resolver.
+
+    `client` se conserva por compatibilidad con los llamadores, pero no se usa:
+    la decodificacion sync corre en su propio thread con su propio cliente.
+    """
+    del client  # kept for call-site compatibility
     token = extract_token(google_news_url)
     if not token:
         return google_news_url or None
@@ -136,19 +153,9 @@ async def resolve_real_url(
         logger.debug("URL resuelta via payload legacy")
         return direct
 
-    owns_client = client is None
-    client = client or httpx.AsyncClient(
-        headers={"User-Agent": _USER_AGENT},
-        timeout=_TIMEOUT,
-        follow_redirects=True,
-    )
-    try:
-        import asyncio
+    import asyncio
 
-        resolved = await asyncio.to_thread(_decode_via_batchexecute, client, token)
-    finally:
-        if owns_client:
-            await client.aclose()
+    resolved = await asyncio.to_thread(_decode_via_batchexecute, token)
 
     if resolved:
         logger.debug("URL resuelta via batchexecute")

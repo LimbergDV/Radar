@@ -199,6 +199,25 @@ async def test_search_invalid_key_does_not_blame_quota(monkeypatch):
     assert "SYNC_INTERVAL_MINUTES" not in message
 
 @pytest.mark.asyncio
+async def test_search_raises_when_quota_returns_no_candidates(monkeypatch):
+    """Cuota agotada a medias y sin resultados tampoco es un sync vacio normal.
+
+    Una busqueda responde 429 y la otra 200 con cero items: no es que no haya
+    noticias, es que no se pudo preguntar del todo.
+    """
+    _install_fake_client(
+        monkeypatch,
+        status=200,
+        fail_indexes={0},
+        fail_status=429,
+        fail_text='{"error":{"message":"Quota exceeded"}}',
+    )
+
+    config = YouTubeConfig(keywords=["ia", "ml"], languages=["es"])
+    with pytest.raises(YouTubeApiError, match="Cuota"):
+        await YouTubeFetcher(api_key="key")._fetch_search_candidates(config, [])
+
+@pytest.mark.asyncio
 async def test_search_tolerates_partial_failures(monkeypatch):
     """Si solo falla alguna.keyword, se sigue con el resto."""
     captured = _install_fake_client(
@@ -213,7 +232,15 @@ async def test_search_tolerates_partial_failures(monkeypatch):
 
     assert isinstance(result, list)
 
-def _install_fake_client(monkeypatch, *, status: int, text: str = "", fail_indexes=None, fail_status: int = 500):
+def _install_fake_client(
+    monkeypatch,
+    *,
+    status: int,
+    text: str = "",
+    fail_indexes=None,
+    fail_status: int = 500,
+    fail_text: str = "boom",
+):
     """Instala un cliente httpx falso y devuelve el registro de peticiones."""
     captured = SimpleNamespace(params=[], urls=[])
     failures = set(fail_indexes or ())
@@ -238,7 +265,7 @@ def _install_fake_client(monkeypatch, *, status: int, text: str = "", fail_index
             captured.params.append(params or {})
             captured.urls.append(url)
             if index in failures:
-                return _FakeResponse(fail_status, "boom")
+                return _FakeResponse(fail_status, fail_text)
             return _FakeResponse(status, text)
 
     monkeypatch.setattr(YouTubeFetcher, "_client", lambda self: _FakeClient())

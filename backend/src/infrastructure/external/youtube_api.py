@@ -177,6 +177,7 @@ class YouTubeFetcher:
         items: list[dict] = []
         seen_ids: set[str] = set()
         failures: list[str] = []
+        quota_errors = 0
 
         for response in responses:
             if isinstance(response, Exception):
@@ -185,7 +186,10 @@ class YouTubeFetcher:
                 continue
             if response.status_code != 200:
                 logger.warning("YouTube API devolvio %s: %s", response.status_code, response.text[:200])
-                failures.append(_describe_api_error(response))
+                detail = _describe_api_error(response)
+                failures.append(detail)
+                if "cuota" in detail:
+                    quota_errors += 1
                 continue
 
             for item in response.json().get("items", []):
@@ -202,6 +206,16 @@ class YouTubeFetcher:
             raise YouTubeApiError(
                 f"La API de YouTube no devolvió nada en ninguna de las "
                 f"{len(responses)} búsquedas ({detail}).{_quota_hint(detail)}"
+            )
+
+        # Cuota agotada a medias: unas búsquedas pasan y otras no. Si además no
+        # sale ningún candidato, el sync devolvería 0 items y parecería que no
+        # hay contenido nuevo, cuando en realidad no se pudo ni preguntar.
+        if not items and quota_errors:
+            raise YouTubeApiError(
+                f"Cuota diaria de la API de YouTube agotada: {quota_errors} de "
+                f"{len(responses)} búsquedas rechazadas y 0 resultados."
+                f"{_quota_hint('cuota')}"
             )
 
         items.sort(key=lambda x: (x.get("snippet") or {}).get("publishedAt", ""), reverse=True)

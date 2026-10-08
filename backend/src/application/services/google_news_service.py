@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.entities.google_news import GoogleNewsArticle
 from src.core.logging_config import get_logger
 from src.infrastructure.database.repositories.google_news_pg_repo import GoogleNewsRepository
+from src.infrastructure.external.bing_news_api import BingNewsFetcher
 from src.infrastructure.external.google_news_api import GoogleNewsFetcher
 
 logger = get_logger(__name__)
@@ -25,12 +26,7 @@ class GoogleNewsService:
         started = time.perf_counter()
         config = await self.repo.get_config()
 
-        fetcher = GoogleNewsFetcher()
-        try:
-            new_articles: list[GoogleNewsArticle] = await fetcher.sync_pipeline(config)
-        except Exception as exc:  # noqa: BLE001 - queremos un 502, no un 500 crudo
-            logger.exception("Fallo la sincronizacion de Google News: %s", exc)
-            raise GoogleNewsServiceError(f"Error sincronizando con Google News: {exc}") from exc
+        new_articles, source_name = await self._discover(config)
 
         if new_articles:
             await self.repo.save_articles(new_articles)
@@ -41,22 +37,45 @@ class GoogleNewsService:
         duration = round(time.perf_counter() - started, 2)
         with_content = sum(1 for a in new_articles if a.content_fetched)
         logger.info(
-            "Google News: %d articulos sincronizados (%d con contenido) en %ss",
-            len(new_articles),
-            with_content,
-            duration,
+            "Noticias (%s): %d articulos sincronizados (%d con contenido) en %ss",
+            source_name, len(new_articles), with_content, duration,
         )
+
+        missing = len(new_articles) - with_content
+        message = None
+        if missing:
+            message = f"{missing} articulos guardados sin cuerpo: el medio no expone el texto"
+
         return {
             "status": "success",
             "source": "news",
             "items_synced": len(new_articles),
             "duration_seconds": duration,
-            "message": (
-                None if with_content == len(new_articles)
-                else f"{len(new_articles) - with_content} articulos guardados sin cuerpo: "
-                     "Google News ya no expone la URL real del medio"
-            ),
+            "message": message,
         }
+
+    async def _discover(self, config) -> tuple[list[GoogleNewsArticle], str]:
+        """Bing News primero; Google News como red de seguridad.
+
+        Bing es el primario porque sus enlaces apuntan al medio y por tanto el
+        articulo se puede leer. Si Bing no devuelve nada (cambio de API, cuota,
+        bloqueos), se cae a Google News: entrega menos valor —el texto ya no se
+        puede recuperar— pero titles y medios sirven para que el feed no quede
+        vacio del dia.
+        """
+        try:
+            articles = await BingNewsFetcher().sync_pipeline(config)
+            if articles:
+                return articles, "bing"
+            logger.warning("Bing News sin resultados; se intenta Google News como fallback")
+        except Exception as exc:  # noqa: BLE001 - el fallback no debe caer por esto
+            logger.warning("Bing News fallo (%s); se intenta Google News como fallback", exc)
+
+        try:
+            return await GoogleNewsFetcher().sync_pipeline(config), "google"
+        except Exception as exc:  # noqa: BLE001 - queremos un 502, no un 500 crudo
+            logger.exception("Fallo la sincronizacion de noticias: %s", exc)
+            raise GoogleNewsServiceError(f"Error sincronizando noticias: {exc}") from exc
 
     async def get_articles(
         self,

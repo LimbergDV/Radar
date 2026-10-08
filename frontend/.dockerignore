@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.angular/
+*.tsbuildinfo
+.git/
+.gitignore
+.vscode/
+.idea/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+Dockerfile
+.dockerignore
+nginx.conf.template
+README.md
