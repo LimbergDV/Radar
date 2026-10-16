@@ -11,6 +11,7 @@ pydantic-settings solo probaria a parsearlo como JSON.
 """
 
 import pytest
+from pydantic import ValidationError
 
 from src.infrastructure.database.settings import Settings
 
@@ -49,6 +50,24 @@ def test_database_url_strips_surrounding_whitespace():
     assert Settings(database_url="  postgres://u:p@h/db  ").database_url == (
         "postgresql+asyncpg://u:p@h/db"
     )
+
+def test_missing_database_url_explains_how_to_fix_it():
+    """En Railway esto es el error mas comun: la variable no existe en el servicio.
+
+    Un "Field required" a secas no dice ni donde ni como arreglarlo.
+    """
+    with pytest.raises(ValidationError) as excinfo:
+        Settings(database_url="")
+
+    message = str(excinfo.value)
+    assert "DATABASE_URL" in message
+    assert "Railway" in message
+
+
+def test_whitespace_only_database_url_is_treated_as_missing():
+    with pytest.raises(ValidationError, match="DATABASE_URL"):
+        Settings(database_url="   ")
+
 
 def test_cors_origins_accepts_json_list():
     got = _settings(cors_origins='["https://a.up.railway.app","https://b.up.railway.app"]')
