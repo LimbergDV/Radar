@@ -29,8 +29,17 @@ COPY --from=build /app/dist/frontend/browser /usr/share/nginx/html
 
 EXPOSE 80
 
-# envsubst CON lista explicita: sustituye unicamente BACKEND_URL y DNS_RESOLVER.
-# Sin lista, envsubst se come tambien $uri, $host, $scheme y $request_uri (que son
-# variables de nginx, no del entorno) y el `try_files` de la SPA queda vacio.
-# Las comillas simples evitan que sea el propio shell quien los expanda antes.
+# Default del resolver DNS de Railway. Se declara como ENV (y no como
+# ${DNS_RESOLVER:-...} en el CMD) porque envsubst recibe una lista de NOMBRES
+# de variable: si el shell le pasa el valor, no hay nada que sustituir y queda
+# "resolver ${DNS_RESOLVER}", sintaxis invalida -> nginx no arranca y el
+# frontend se cae entero, no solo /api. Con ENV siempre hay valor, y Railway
+# lo puede sobreescribir si su /etc/resolv.conf usa otro.
+ENV DNS_RESOLVER=127.0.0.11
+
+# envsubst con lista EXPLICITA de variables: sustituye solo BACKEND_URL y
+# DNS_RESOLVER. Sin lista, envsubst se come tambien $uri, $host, $scheme y
+# $request_uri (que son variables de nginx, no del entorno) y el `try_files`
+# de la SPA queda vacio -> 404 al recargar en /news/abc.
+# Las comillas simples dejan los nombres intactos hasta envsubst.
 CMD ["sh", "-c", "envsubst '${BACKEND_URL} ${DNS_RESOLVER}' < /etc/nginx/radar.conf.template > /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'"]
