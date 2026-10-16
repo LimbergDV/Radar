@@ -41,4 +41,5 @@ testem.log
 .DS_Store
 Thumbs.db
 
-*.md
+# Los .md sí se versionan (README.md, DESIGN.md). Este `*.md` los
+# dejaba huérfanos en local.

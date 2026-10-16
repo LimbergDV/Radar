@@ -29,9 +29,8 @@ COPY --from=build /app/dist/frontend/browser /usr/share/nginx/html
 
 EXPOSE 80
 
-# envsubst CON lista explicita: sustituye unicamente ${BACKEND_URL}.
-# Sin lista, envsubst se come tambien $uri, $host y $scheme (que son variables
-# de nginx, no del entorno) y el `try_files` de la SPA queda vacio -> 404 al
-# recargar en /news/abc. Las comillas simples evitan que sea el propio shell
-# quien expanda ${BACKEND_URL} antes de tiempo.
-CMD ["sh", "-c", "envsubst '${BACKEND_URL}' < /etc/nginx/radar.conf.template > /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'"]
+# envsubst CON lista explicita: sustituye unicamente BACKEND_URL y DNS_RESOLVER.
+# Sin lista, envsubst se come tambien $uri, $host, $scheme y $request_uri (que son
+# variables de nginx, no del entorno) y el `try_files` de la SPA queda vacio.
+# Las comillas simples evitan que sea el propio shell quien los expanda antes.
+CMD ["sh", "-c", "envsubst '${BACKEND_URL} ${DNS_RESOLVER}' < /etc/nginx/radar.conf.template > /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'"]
