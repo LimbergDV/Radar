@@ -9,20 +9,16 @@ server {
     index index.html;
 
     # ---------------------------------------------------------------------
-    # DNS dinamico.
+    # Upstream: LITERAL a proposito.
     #
-    # Con `proxy_pass http://host:8000;` (literal) nginx resuelve el nombre UNA
-    # vez al arrancar y cachea la IP para siempre. En Railway eso rompe en
-    # cuanto el backend se redespliega y le asignan otra IP interna: el
-    # frontend sigue golpeando la IP vieja y responde 502 aunque el backend
-    # este perfectamente sano.
+    # La variante con `resolver` + variable (re-resolver en cada peticion) se
+    # descarto: 127.0.0.11 no es el DNS de Railway, el nombre del backend no
+    # resolvia y cada request tardaba 30s en fallar.
     #
-    # Poner el upstream en una variable obliga a nginx a resolverlo en cada
-    # peticion, y `valid=10s` limita el cache del resolver a 10 segundos.
-    # DNS_RESOLVER se sobreescribe en Railway si tu /etc/resolv.conf usa otro.
+    # Consecuencia de usar el literal: nginx resuelve el nombre UNA vez al
+    # arrancar y cachea la IP. Si redespliegas el backend y le asignan otra IP
+    # interna, hay que REINICIAR el frontend (una vez, no por request).
     # ---------------------------------------------------------------------
-    resolver ${DNS_RESOLVER} valid=10s ipv6=off;
-    set $radar_upstream ${BACKEND_URL};
 
     # ---------------------------------------------------------------------
     # Proxy al backend.
@@ -33,9 +29,9 @@ server {
     # ---------------------------------------------------------------------
 
     location /api/ {
-        # `$radar_upstream$request_uri` mantiene la URI intacta: /api/feed/stats
-        # llega al backend como /api/feed/stats, query string incluida.
-        proxy_pass $radar_upstream$request_uri;
+        # SIN barra final: el backend expone /api/... y /health. Con barra,
+        # nginx quitaria el prefijo /api/ y llegaria /feed/stats (404).
+        proxy_pass ${BACKEND_URL};
         proxy_http_version 1.1;
 
         proxy_set_header Host $host;
@@ -67,7 +63,7 @@ server {
     # El frontend hace health-poll a /health (environment.ts quita el sufijo
     # /api), que vive fuera del prefijo y por eso necesita su propia regla.
     location = /health {
-        proxy_pass $radar_upstream$request_uri;
+        proxy_pass ${BACKEND_URL};
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto $scheme;
