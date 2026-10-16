@@ -32,4 +32,6 @@ dist/
 .DS_Store
 Thumbs.db
 
-*.md
+# Los .md SI se versionan: README.md, DESIGN.md y los planes de diseño son
+# parte del proyecto. Antes había un `*.md` que los dejaba todos huérfanos en
+# local, incluido el README del servidor MCP.

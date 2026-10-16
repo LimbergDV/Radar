@@ -1,6 +1,6 @@
-from typing import Annotated
+from typing import Annotated, Self
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Dialecto que espera `create_async_engine`. Cualquier URL de Postgres tiene que
@@ -16,7 +16,10 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    database_url: str
+    # Sin default a proposito: se valida en `_explain_missing_database_url` para
+    # poder dar un mensaje que diga COMO arreglarlo. Con `database_url: str`
+    # (obligatorio), pydantic soltaba un frio "Field required" sin contexto.
+    database_url: str = ""
     sql_echo: bool = False
 
     youtube_api_key: str = ""
@@ -32,6 +35,28 @@ class Settings(BaseSettings):
 
     sync_interval_minutes: int = 60
     log_level: str = "INFO"
+
+    @model_validator(mode="after")
+    def _explain_missing_database_url(self) -> Self:
+        """Convierte 'Field required' en instrucciones para arreglarlo.
+
+        Este es el error mas comun al desplegar: la variable no se creo en el
+        servicio y pydantic no puede saber si fue un descuido o un nombre mal
+        puesto. Ademas, sin esto el fallo aparece en el import de settings, asi
+        que ni Alembic ni uvicorn llegan a arrancar.
+        """
+        if self.database_url.strip():
+            return self
+
+        raise ValueError(
+            "Falta la variable de entorno DATABASE_URL. "
+            "En local: ponla en backend/.env. "
+            "En Railway: abre el servicio del backend -> pestana Variables -> "
+            "'+ New Variable' -> tipo 'Reference' -> elige tu servicio de "
+            "PostgreSQL -> elige DATABASE_URL. Si prefieres pegarla a mano, "
+            "copia la URL de la pestana Variables del propio Postgres; se "
+            "acepta en formato postgres:// o postgresql://."
+        )
 
     @field_validator("database_url")
     @classmethod
@@ -49,6 +74,12 @@ class Settings(BaseSettings):
             return value
 
         url = value.strip()
+        # Vacio (o solo espacios) se deja como esta para que lo atrape el
+        # validador del modelo y explique como arreglarlo. Si se siguiera, un
+        # "   " se convertiria en "postgresql+asyncpg://" y pareceria valido.
+        if not url:
+            return url
+
         scheme, sep, rest = url.partition("://")
         if not sep:
             # URL sin esquema explicito: se asume Postgres.
