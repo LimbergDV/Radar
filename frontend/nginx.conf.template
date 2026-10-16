@@ -9,6 +9,22 @@ server {
     index index.html;
 
     # ---------------------------------------------------------------------
+    # DNS dinamico.
+    #
+    # Con `proxy_pass http://host:8000;` (literal) nginx resuelve el nombre UNA
+    # vez al arrancar y cachea la IP para siempre. En Railway eso rompe en
+    # cuanto el backend se redespliega y le asignan otra IP interna: el
+    # frontend sigue golpeando la IP vieja y responde 502 aunque el backend
+    # este perfectamente sano.
+    #
+    # Poner el upstream en una variable obliga a nginx a resolverlo en cada
+    # peticion, y `valid=10s` limita el cache del resolver a 10 segundos.
+    # DNS_RESOLVER se sobreescribe en Railway si tu /etc/resolv.conf usa otro.
+    # ---------------------------------------------------------------------
+    resolver ${DNS_RESOLVER} valid=10s ipv6=off;
+    set $radar_upstream ${BACKEND_URL};
+
+    # ---------------------------------------------------------------------
     # Proxy al backend.
     #
     # OJO con proxy_pass SIN barra final: el backend expone /api/... y
@@ -17,7 +33,9 @@ server {
     # ---------------------------------------------------------------------
 
     location /api/ {
-        proxy_pass ${BACKEND_URL};
+        # `$radar_upstream$request_uri` mantiene la URI intacta: /api/feed/stats
+        # llega al backend como /api/feed/stats, query string incluida.
+        proxy_pass $radar_upstream$request_uri;
         proxy_http_version 1.1;
 
         proxy_set_header Host $host;
@@ -43,13 +61,13 @@ server {
     # BACKEND_URL apunta al sitio equivocado.
     location @api_upstream_down {
         default_type text/plain;
-        return 502 "El frontend no logra hablar con el backend.\nUpstream configurado: ${BACKEND_URL}\nRevisa: (1) que BACKEND_URL apunte al dominio del backend y NO al del frontend, (2) que el servicio backend este desplegado y sin errores, (3) que su dominio publico exista.\n";
+        return 502 "El frontend no logra hablar con el backend.\nUpstream configurado: ${BACKEND_URL}\nRevisa: (1) que el servicio backend este desplegado y sano, (2) que BACKEND_URL apunte a el y no al frontend, (3) si acabas de redesplegar el backend, reinicia el frontend: nginx cachea la IP del upstream al arrancar.\n";
     }
 
     # El frontend hace health-poll a /health (environment.ts quita el sufijo
     # /api), que vive fuera del prefijo y por eso necesita su propia regla.
     location = /health {
-        proxy_pass ${BACKEND_URL}/health;
+        proxy_pass $radar_upstream$request_uri;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto $scheme;

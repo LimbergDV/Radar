@@ -1,0 +1,12 @@
+tests/
+pytest.ini
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
