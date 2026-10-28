@@ -22,16 +22,19 @@ FROM nginx:1.27-alpine
 
 # La plantilla va FUERA de /etc/nginx/templates/ a proposito. Si se dejara
 # ahi, el entrypoint de la imagen oficial la sustituiria por su cuenta con
-# envsubst; funciona, pero aqui el render es explicito (ver CMD) para no
-# depender de como ese script decide que variables toca.
+# envsubst; funciona, pero aqui el render es explicito (ver el entrypoint) para
+# no depender de como ese script decide que variables toca.
 COPY nginx.conf.template /etc/nginx/radar.conf.template
+COPY docker-entrypoint.sh /usr/local/bin/radar-entrypoint.sh
+RUN chmod +x /usr/local/bin/radar-entrypoint.sh
 COPY --from=build /app/dist/frontend/browser /usr/share/nginx/html
 
 EXPOSE 80
 
-# envsubst con lista EXPLICITA de variables: sustituye solo BACKEND_URL.
-# Sin lista, envsubst se come tambien $uri, $host, $scheme y $request_uri (que son
-# variables de nginx, no del entorno) y el `try_files` de la SPA queda vacio ->
-# 404 al recargar en /news/abc. Las comillas simples dejan el nombre intacto
-# hasta envsubst, que es lo que espera: una lista de NOMBRES, no de valores.
-CMD ["sh", "-c", "envsubst '${BACKEND_URL}' < /etc/nginx/radar.conf.template > /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'"]
+# El entrypoint detecta el resolver del contenedor (Railway usa IPv6, Docker
+# local 127.0.0.11), arma el upstream dinamico desde BACKEND_URL y renderiza
+# nginx. Se hace en runtime, no en build: Railway inyecta esas variables al
+# desplegar. Con `resolver` + variable, nginx re-resuelve la IP del backend en
+# cada request y un redeploy ya no deja el frontend en 502.
+ENTRYPOINT ["/usr/local/bin/radar-entrypoint.sh"]
+CMD []
