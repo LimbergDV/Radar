@@ -1,5 +1,15 @@
-# nginx del frontend. Sustituido por envsubst al arrancar (ver Dockerfile), asi
-# que ${BACKEND_URL} llega desde las variables del servicio de Railway.
+# nginx del frontend. Sustituido por envsubst al arrancar (ver docker-entrypoint.sh),
+# asi que ${BACKEND_UPSTREAM} y ${NGINX_RESOLVER} llegan del entorno del contenedor.
+
+# Resolver del contenedor, detectado en el entrypoint. En Railway es IPv6 y va
+# entre corchetes; en Docker local es 127.0.0.11. NO se hardcodea: hardcodear
+# 127.0.0.11 en Railway fue justo lo que rompio la resolucion antes.
+#
+# `valid=10s` mantiene la IP en cache solo 10s. Al usar una variable en
+# proxy_pass, nginx vuelve a preguntar al resolver en cada request, asi que un
+# redeploy del backend con IP nueva se sigue solo (sin reiniciar el frontend).
+resolver ${NGINX_RESOLVER} valid=10s ipv6=on;
+resolver_timeout 5s;
 
 server {
     listen 80;
@@ -8,33 +18,20 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
-    # ---------------------------------------------------------------------
-    # Upstream: LITERAL a proposito.
-    #
-    # La variante con `resolver` + variable (re-resolver en cada peticion) se
-    # descarto: 127.0.0.11 no es el DNS de Railway, el nombre del backend no
-    # resolvia y cada request tardaba 30s en fallar.
-    #
-    # Consecuencia de usar el literal: nginx resuelve el nombre UNA vez al
-    # arrancar y cachea la IP. Si redespliegas el backend y le asignan otra IP
-    # interna, hay que REINICIAR el frontend (una vez, no por request).
-    #
-    # OJO con proxy_pass SIN barra final: el backend expone /api/... y /health.
-    # Con barra, nginx quitaria el prefijo /api/ y llegaria /feed (404).
-    # ---------------------------------------------------------------------
+    # Host:puerto del backend, sin esquema. Lo arma el entrypoint a partir de
+    # BACKEND_URL. La variable es lo que fuerza la resolucion por request.
+    set $backend_upstream "${BACKEND_UPSTREAM}";
 
     # ---------------------------------------------------------------------
     # Proxy al backend.
     #
-    # OJO con proxy_pass SIN barra final: el backend expone /api/... y
-    # /health. Con barra, nginx quitaria el prefijo /api/ de la URI y el
-    # backend recibiria /feed en vez de /api/feed (404 en todas).
+    # OJO con $request_uri: al usar una variable en proxy_pass, nginx NO hace
+    # el reemplazo de prefijo de la forma literal; hay que pasar la URI
+    # completa. El backend expone /api/... y /health, y con esto llega igual.
     # ---------------------------------------------------------------------
 
     location /api/ {
-        # SIN barra final: el backend expone /api/... y /health. Con barra,
-        # nginx quitaria el prefijo /api/ y llegaria /feed/stats (404).
-        proxy_pass ${BACKEND_URL};
+        proxy_pass ${BACKEND_SCHEME}://$backend_upstream$request_uri;
         proxy_http_version 1.1;
 
         proxy_set_header Host $proxy_host;
@@ -43,8 +40,6 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
 
         # Conectar rapido: si el upstream no responde, 5s y se dice cual era.
-        # Un connect-timeout largo convertia un error de configuracion en un
-        # cuelgue de 30s sin informacion util.
         proxy_connect_timeout 5s;
         # Lectura larga: el sync raspa articulos y llama a la API de YouTube,
         # asi que un POST /sync puede tardar de verdad.
@@ -56,17 +51,16 @@ server {
     }
 
     # Sustituye el 502/504 generico por uno que dice a quien se intentaba
-    # llamar. Es la diferencia entre "no funciona" y "mira esto" cuando
-    # BACKEND_URL apunta al sitio equivocado.
+    # llamar. Es la diferencia entre "no funciona" y "mira esto".
     location @api_upstream_down {
         default_type text/plain;
-        return 502 "El frontend no logra hablar con el backend.\nUpstream configurado: ${BACKEND_URL}\nRevisa: (1) que el servicio backend este desplegado y sano, (2) que BACKEND_URL apunte a el y no al frontend, (3) si acabas de redesplegar el backend, reinicia el frontend: nginx cachea la IP del upstream al arrancar.\n";
+        return 502 "El frontend no logra hablar con el backend.\nBackend configurado: ${BACKEND_SCHEME}://${BACKEND_UPSTREAM}\nRevisa: (1) que el servicio backend este desplegado y sano, (2) que BACKEND_URL use el host interno correcto (servicio.railway.internal:8000), (3) los logs del backend si el proceso no arranco (por ejemplo, una migracion de Alembic).\n";
     }
 
     # El frontend hace health-poll a /health (environment.ts quita el sufijo
     # /api), que vive fuera del prefijo y por eso necesita su propia regla.
     location = /health {
-        proxy_pass ${BACKEND_URL};
+        proxy_pass ${BACKEND_SCHEME}://$backend_upstream$request_uri;
         proxy_http_version 1.1;
         proxy_set_header Host $proxy_host;
         proxy_set_header X-Forwarded-Proto $scheme;
