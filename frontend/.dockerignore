@@ -13,4 +13,7 @@ dist/
 .DS_Store
 Dockerfile
 .dockerignore
-README.md
+
+# NO ignorar nginx.conf.template: el Dockerfile lo copia a /etc/nginx/.
+# Estaba en esta lista y rompia el build entero ("not found"), que es peor
+# que no tener optimizacion.

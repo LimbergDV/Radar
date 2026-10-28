@@ -1,0 +1,137 @@
+<a class="back" routerLink="/papers">
+  <lucide-icon name="ArrowLeft" [size]="14" aria-hidden="true" />
+  Volver a Papers
+</a>
+
+@if (resource.data(); as p) {
+  <div class="eyebrow">
+    <span class="org">{{ authorLine(p) }}</span>
+    <span class="dot" aria-hidden="true">·</span>
+    <time class="u-meta" [attr.datetime]="p.published_at">{{ p.published_at | timeAgo }}</time>
+    <span class="dot" aria-hidden="true">·</span>
+    <span class="u-mono-label">{{ p.id }}</span>
+    @if (p.source === 'daily') {
+      <span class="flag">Daily Papers</span>
+    }
+  </div>
+
+  <h1 class="title">{{ p.title }}</h1>
+
+  <div class="metrics">
+    <span class="metric">
+      <lucide-icon name="Bookmark" [size]="14" aria-hidden="true" />
+      {{ p.upvotes }} upvotes
+    </span>
+    <span class="metric">
+      <lucide-icon name="Hash" [size]="14" aria-hidden="true" />
+      {{ p.comments }} comentarios
+    </span>
+    @if (p.submitted_on_daily_at) {
+      <span class="metric">
+        <lucide-icon name="Calendar" [size]="14" aria-hidden="true" />
+        En el Daily {{ p.submitted_on_daily_at | timeAgo }}
+      </span>
+    }
+  </div>
+
+  <div class="actions">
+    <a class="out out--solid" [href]="p.hf_url" target="_blank" rel="noopener">
+      Ver en Hugging Face
+      <lucide-icon name="ExternalLink" [size]="12" aria-hidden="true" />
+    </a>
+    <a class="out" [href]="p.arxiv_url" target="_blank" rel="noopener">arXiv</a>
+    <a class="out" [href]="p.pdf_url" target="_blank" rel="noopener">PDF</a>
+    @if (p.github_repo) {
+      <a class="out" [href]="p.github_repo" target="_blank" rel="noopener">
+        <lucide-icon name="Github" [size]="12" aria-hidden="true" />
+        Código
+      </a>
+    }
+    @if (p.project_page) {
+      <a class="out" [href]="p.project_page" target="_blank" rel="noopener">Project page</a>
+    }
+  </div>
+
+  @if (p.ai_summary) {
+    <section class="callout">
+      <span class="callout__label">AI summary · Hugging Face</span>
+      <p class="callout__text">{{ p.ai_summary }}</p>
+    </section>
+  }
+
+  @if (p.ai_keywords.length) {
+    <div class="keywords">
+      @for (keyword of p.ai_keywords; track keyword) {
+        <span class="keyword">{{ keyword }}</span>
+      }
+    </div>
+  }
+
+  <section class="section">
+    <h2 class="section__title">Abstract</h2>
+    @if (p.abstract) {
+      <article class="body">{{ p.abstract }}</article>
+    } @else {
+      <p class="muted">Hugging Face no trae el abstract de este paper. Ábrelo en arXiv.</p>
+    }
+  </section>
+
+  <section class="section">
+    <h2 class="section__title">Autores</h2>
+    @if (p.authors.length) {
+      <p class="authors">{{ p.authors.join(', ') }}</p>
+    } @else {
+      <p class="muted">Sin autores listados.</p>
+    }
+  </section>
+
+  @if (p.linked_models.length || p.linked_datasets.length || p.linked_spaces.length) {
+    <section class="section">
+      <h2 class="section__title">Recursos enlazados</h2>
+
+      @if (p.linked_models.length) {
+        <div class="resources">
+          <span class="resources__label">Modelos</span>
+          <div class="resources__list">
+            @for (model of p.linked_models; track model) {
+              <a class="resource" [href]="modelUrl(model)" target="_blank" rel="noopener">{{ model }}</a>
+            }
+          </div>
+        </div>
+      }
+
+      @if (p.linked_datasets.length) {
+        <div class="resources">
+          <span class="resources__label">Datasets</span>
+          <div class="resources__list">
+            @for (dataset of p.linked_datasets; track dataset) {
+              <a class="resource" [href]="datasetUrl(dataset)" target="_blank" rel="noopener">{{ dataset }}</a>
+            }
+          </div>
+        </div>
+      }
+
+      @if (p.linked_spaces.length) {
+        <div class="resources">
+          <span class="resources__label">Spaces</span>
+          <div class="resources__list">
+            @for (space of p.linked_spaces; track space) {
+              <a class="resource" [href]="spaceUrl(space)" target="_blank" rel="noopener">{{ space }}</a>
+            }
+          </div>
+        </div>
+      }
+    </section>
+  }
+
+  <p class="synced u-meta">Sincronizado {{ p.synced_at | timeAgo }} desde Hugging Face.</p>
+} @else if (resource.error()) {
+  <div class="panel">
+    <lucide-icon name="CircleAlert" [size]="20" aria-hidden="true" />
+    <h2>{{ resource.error() }}</h2>
+  </div>
+} @else {
+  <div class="panel">
+    <h2>Cargando…</h2>
+  </div>
+}

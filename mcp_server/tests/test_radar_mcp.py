@@ -136,6 +136,8 @@ class TestParseContentId:
     def test_parses_known_kinds(self):
         assert parse_content_id("readme:facebook/react") == ("readme", "facebook/react")
         assert parse_content_id("transcript:abc123") == ("transcript", "abc123")
+        assert parse_content_id("paper:2610.36082") == ("paper", "2610.36082")
+        assert parse_content_id("paper_ai:2610.36082") == ("paper_ai", "2610.36082")
 
     def test_rejects_missing_ref(self):
         with pytest.raises(RadarError, match="content_id inválido"):
@@ -393,6 +395,67 @@ class TestGetRepo:
             await tools.get_repo("no/existe")
 
 
+class TestGetPaper:
+    @pytest.mark.asyncio
+    async def test_summary_does_not_return_the_texts(self):
+        async def handler(request):
+            return json_response(
+                {
+                    "id": "2610.36082",
+                    "title": "Paper",
+                    "abstract": "a" * 2500,
+                    "ai_summary": "s" * 900,
+                    "authors": ["A"],
+                }
+            )
+
+        tools = make_tools(handler)
+        result = await tools.get_paper("2610.36082")
+
+        assert "abstract" not in result["paper"]
+        assert "ai_summary" not in result["paper"]
+        assert result["abstract"]["content_id"] == "paper:2610.36082"
+        assert result["ai_summary"]["content_id"] == "paper_ai:2610.36082"
+        assert result["abstract"]["available"] is True
+        assert result["abstract"]["total_chars"] == 2500
+
+    @pytest.mark.asyncio
+    async def test_full_returns_and_clips_both_texts(self):
+        async def handler(request):
+            return json_response(
+                {
+                    "id": "p1",
+                    "abstract": "a" * 300,
+                    "ai_summary": "s" * 200,
+                }
+            )
+
+        tools = make_tools(handler, max_content_chars=100)
+        result = await tools.get_paper("p1", content="full")
+
+        assert result["abstract"]["chars_returned"] == 100
+        assert result["abstract"]["truncated"] is True
+        assert result["abstract"]["next_offset"] == 100
+        assert result["ai_summary"]["chars_returned"] == 100
+        assert result["ai_summary"]["truncated"] is True
+
+    @pytest.mark.asyncio
+    async def test_missing_ai_summary_is_said_plainly(self):
+        async def handler(request):
+            return json_response({"id": "p1", "abstract": "texto", "ai_summary": ""})
+
+        tools = make_tools(handler)
+        result = await tools.get_paper("p1")
+        assert result["ai_summary"]["available"] is False
+        assert "no generó un AI summary" in result["ai_summary"]["hint"]
+
+    @pytest.mark.asyncio
+    async def test_requires_paper_id(self):
+        tools = make_tools(lambda r: json_response({}))
+        with pytest.raises(RadarError, match="Falta paper_id"):
+            await tools.get_paper("")
+
+
 class TestGetContext:
     @pytest.mark.asyncio
     async def test_reads_a_range_of_a_long_readme(self):
@@ -405,6 +468,21 @@ class TestGetContext:
         assert block["text"] == "01234"
         assert block["offset"] == 10
         assert block["total_chars"] == 100
+
+    @pytest.mark.asyncio
+    async def test_reads_the_abstract_or_ai_summary_of_a_paper(self):
+        async def handler(request):
+            assert request.url.path == "/api/papers/2610.36082"
+            return json_response(
+                {"abstract": "abstract-text", "ai_summary": "ai-summary-text"}
+            )
+
+        tools = make_tools(handler)
+        abstract = await tools.get_context("paper:2610.36082")
+        ai = await tools.get_context("paper_ai:2610.36082")
+
+        assert abstract["text"] == "abstract-text"
+        assert ai["text"] == "ai-summary-text"
 
     @pytest.mark.asyncio
     async def test_rejects_unknown_kind(self):
@@ -475,6 +553,7 @@ class TestServerSurface:
             "radar_get_video",
             "radar_get_article",
             "radar_get_repo",
+            "radar_get_paper",
             "radar_get_context",
             "radar_sync",
         }

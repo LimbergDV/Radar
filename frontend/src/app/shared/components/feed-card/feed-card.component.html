@@ -50,6 +50,10 @@
         @if (item().source === 'github' && item().extra.topics?.length) {
           <span class="card__topic">{{ item().extra.topics![0] }}</span>
         }
+
+        @if (item().source === 'papers' && item().extra.keywords?.length) {
+          <span class="card__topic">{{ item().extra.keywords![0] }}</span>
+        }
       </div>
     </div>
   </a>

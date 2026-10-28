@@ -6,7 +6,7 @@ sensatos) para que los services y los routers no repitan validacion.
 
 from dataclasses import fields
 
-from src.core.entities.config import GitHubConfig, GoogleNewsConfig, YouTubeConfig
+from src.core.entities.config import GitHubConfig, GoogleNewsConfig, PaperConfig, YouTubeConfig
 
 MAX_RESULTS_CEILING = 100
 MIN_RESULTS_FLOOR = 1
@@ -98,6 +98,26 @@ def validate_google_news_config(config: GoogleNewsConfig) -> GoogleNewsConfig:
 
     config.max_results = _clamp(config.max_results, 50, 1, MAX_RESULTS_CEILING)
     config.days_window = _clamp(config.days_window, 1, 0, 365)
+    return config
+
+
+def validate_paper_config(config: PaperConfig) -> PaperConfig:
+    """Normaliza keywords, límite y ventana del sync de papers.
+
+    Si se apagan las dos vías (daily y búsqueda) el sync no tendría de dónde
+    sacar nada; se deja el Daily encendido como red de seguridad.
+    """
+    config.keywords = _clean_list(config.keywords, limit=10) or [
+        "agents",
+        "reasoning",
+        "llm",
+    ]
+    config.max_results = _clamp(config.max_results, 50, 1, MAX_RESULTS_CEILING)
+    config.days_back = _clamp(config.days_back, 7, 1, 365)
+    config.include_daily = bool(config.include_daily)
+    config.include_search = bool(config.include_search)
+    if not config.include_daily and not config.include_search:
+        config.include_daily = True
     return config
 
 

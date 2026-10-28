@@ -6,6 +6,7 @@ import { RadarApiService } from '../../core/api/radar-api.service';
 import type {
   GitHubConfig,
   GoogleNewsConfig,
+  PaperConfig,
   YouTubeConfig,
 } from '../../core/models';
 import { ToastService } from '../../core/notifications/toast.service';
@@ -13,7 +14,7 @@ import { PageHeaderComponent } from '../../shared/components/page-header/page-he
 import { SyncButtonComponent } from '../../shared/components/sync-button/sync-button.component';
 import { TimeAgoPipe } from '../../shared/pipes/time-ago.pipe';
 
-type Tab = 'youtube' | 'news' | 'github';
+type Tab = 'youtube' | 'news' | 'github' | 'papers';
 
 @Component({
   selector: 'app-settings',
@@ -39,6 +40,7 @@ export class SettingsComponent {
   protected readonly youtube = signal<YouTubeConfig | null>(null);
   protected readonly news = signal<GoogleNewsConfig | null>(null);
   protected readonly github = signal<GitHubConfig | null>(null);
+  protected readonly papers = signal<PaperConfig | null>(null);
 
   /** Campos de texto que en la API son arrays; aquí se editan separados por coma. */
   protected readonly ytKeywords = signal('');
@@ -47,6 +49,7 @@ export class SettingsComponent {
   protected readonly ghKeywords = signal('');
   protected readonly ghTopics = signal('');
   protected readonly ghLanguages = signal('');
+  protected readonly paperKeywords = signal('');
 
   constructor() {
     this.loadAll();
@@ -73,6 +76,11 @@ export class SettingsComponent {
       this.ghKeywords.set(config.keywords.join(', '));
       this.ghTopics.set(config.selected_topics.join(', '));
       this.ghLanguages.set(config.selected_languages.join(', '));
+    });
+
+    this.api.getPapersConfig().subscribe((config) => {
+      this.papers.set(config);
+      this.paperKeywords.set(config.keywords.join(', '));
     });
   }
 
@@ -156,6 +164,29 @@ export class SettingsComponent {
     });
   }
 
+  protected savePapers(): void {
+    const current = this.papers();
+    if (!current) {
+      return;
+    }
+    this.saving.set('papers');
+
+    const payload: PaperConfig = {
+      ...current,
+      keywords: this.splitList(this.paperKeywords()),
+    };
+
+    this.api.updatePapersConfig(payload).subscribe({
+      next: (saved) => {
+        this.papers.set(saved);
+        this.paperKeywords.set(saved.keywords.join(', '));
+        this.saving.set(null);
+        this.toasts.success('Configuración de papers guardada.');
+      },
+      error: () => this.saving.set(null),
+    });
+  }
+
   protected onSynced(): void {
     this.loadAll();
   }
@@ -172,6 +203,10 @@ export class SettingsComponent {
 
   protected setGitHub(patch: Partial<GitHubConfig>): void {
     this.github.update((config) => (config ? { ...config, ...patch } : config));
+  }
+
+  protected setPapers(patch: Partial<PaperConfig>): void {
+    this.papers.update((config) => (config ? { ...config, ...patch } : config));
   }
 
   /** "Última sincronización: …" o "nunca". */

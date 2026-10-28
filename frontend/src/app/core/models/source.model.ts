@@ -1,7 +1,7 @@
-/** Tipos de las tres fuentes. Reflejan 1:1 los DTOs del backend
- *  (`/api/youtube`, `/api/news`, `/api/github`). */
+/** Tipos de las fuentes. Reflejan 1:1 los DTOs del backend
+ *  (`/api/youtube`, `/api/news`, `/api/github`, `/api/papers`). */
 
-export type SourceId = 'youtube' | 'news' | 'github';
+export type SourceId = 'youtube' | 'news' | 'github' | 'papers';
 
 export interface YouTubeVideoSummary {
   id: string;

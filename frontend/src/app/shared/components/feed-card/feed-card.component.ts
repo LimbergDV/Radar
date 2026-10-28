@@ -51,6 +51,13 @@ export class FeedCardComponent {
       ];
     }
 
+    if (source === 'papers') {
+      return [
+        { icon: 'Bookmark', value: stats.upvotes ?? 0 },
+        { icon: 'Hash', value: stats.comments ?? 0 },
+      ];
+    }
+
     return [];
   });
 
@@ -78,6 +85,9 @@ export class FeedCardComponent {
     if (source === 'news') {
       return author || 'Noticias';
     }
+    if (source === 'papers') {
+      return author || 'Hugging Face';
+    }
     return language || '';
   });
 
@@ -89,6 +99,9 @@ export class FeedCardComponent {
     }
     if (source === 'news') {
       return ['/news', source_id];
+    }
+    if (source === 'papers') {
+      return ['/papers', source_id];
     }
     return ['/youtube', source_id];
   }

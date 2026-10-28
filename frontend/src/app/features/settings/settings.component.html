@@ -17,6 +17,9 @@
   <button class="tab" role="tab" [class.tab--on]="tab() === 'github'" (click)="setTab('github')">
     <lucide-icon name="Github" [size]="14" aria-hidden="true" /> GitHub
   </button>
+  <button class="tab" role="tab" [class.tab--on]="tab() === 'papers'" (click)="setTab('papers')">
+    <lucide-icon name="FileText" [size]="14" aria-hidden="true" /> Papers
+  </button>
 </div>
 
 @if (tab() === 'youtube') {
@@ -203,6 +206,57 @@
           {{ saving() === 'github' ? 'Guardando…' : 'Guardar' }}
         </button>
         <app-sync-button source="github" variant="ghost" label="Guardar y sincronizar" (synced)="onSynced()" />
+      </div>
+    </form>
+  }
+}
+
+@if (tab() === 'papers') {
+  @if (papers(); as cfg) {
+    <form class="form" (ngSubmit)="savePapers()">
+      <label class="field">
+        <span class="field__label">Palabras clave</span>
+        <input type="text" [ngModel]="paperKeywords()" (ngModelChange)="paperKeywords.set($event)"
+               name="paperKeywords" placeholder="agents, reasoning, llm" />
+        <span class="field__hint">Se usan para la búsqueda de Hugging Face. El Daily Papers entra completo.</span>
+      </label>
+
+      <div class="row">
+        <label class="field">
+          <span class="field__label">Máx. resultados</span>
+          <input type="number" min="1" max="100" [ngModel]="cfg.max_results"
+                 (ngModelChange)="setPapers({ max_results: +$event })" name="paperMax" />
+        </label>
+
+        <label class="field">
+          <span class="field__label">Antigüedad máxima (días)</span>
+          <input type="number" min="1" max="365" [ngModel]="cfg.days_back"
+                 (ngModelChange)="setPapers({ days_back: +$event })" name="paperDays" />
+          <span class="field__hint">Ventana para el Daily y la búsqueda.</span>
+        </label>
+      </div>
+
+      <div class="row">
+        <label class="check">
+          <input type="checkbox" [ngModel]="cfg.include_daily"
+                 (ngModelChange)="setPapers({ include_daily: $event })" name="paperDaily" />
+          <span>Incluir Daily Papers</span>
+        </label>
+
+        <label class="check">
+          <input type="checkbox" [ngModel]="cfg.include_search"
+                 (ngModelChange)="setPapers({ include_search: $event })" name="paperSearch" />
+          <span>Incluir búsqueda por keywords</span>
+        </label>
+      </div>
+
+      <p class="u-meta last">Última sincronización: {{ lastSync(cfg.last_search_at) }}</p>
+
+      <div class="actions">
+        <button class="btn btn--solid" type="submit" [disabled]="saving() !== null">
+          {{ saving() === 'papers' ? 'Guardando…' : 'Guardar' }}
+        </button>
+        <app-sync-button source="papers" variant="ghost" label="Guardar y sincronizar" (synced)="onSynced()" />
       </div>
     </form>
   }

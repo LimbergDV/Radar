@@ -2,7 +2,7 @@
   <div class="page__lead">
     <h1>Radar</h1>
     <p class="page__sub">
-      Noticias, videos y repositorios de IA en un solo feed, sincronizados a diario.
+      Noticias, videos, repositorios y papers de IA en un solo feed, sincronizados a diario.
     </p>
   </div>
   <app-sync-button label="Sincronizar todo" (synced)="onSynced()" />
@@ -32,6 +32,14 @@
         [value]="data.github.total | compactNumber"
         [hint]="lastLabel(data.github.latest_item_at)"
         [icon]="'Github'"
+      />
+    </a>
+    <a class="tiles__link" routerLink="/papers">
+      <app-stat-tile
+        label="Papers"
+        [value]="data.papers.total | compactNumber"
+        [hint]="lastLabel(data.papers.latest_item_at)"
+        [icon]="'FileText'"
       />
     </a>
   </section>

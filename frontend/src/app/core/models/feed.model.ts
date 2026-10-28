@@ -23,6 +23,7 @@ export interface FeedItem {
     forks?: number;
     issues?: number;
     has_content?: boolean;
+    upvotes?: number;
   };
   extra: {
     channel_id?: string;
@@ -32,6 +33,11 @@ export interface FeedItem {
     topics?: string[];
     license?: string | null;
     has_readme?: boolean;
+    arxiv_url?: string;
+    pdf_url?: string;
+    keywords?: string[];
+    has_ai_summary?: boolean;
+    github_repo?: string | null;
   };
 }
 
@@ -60,6 +66,7 @@ export interface FeedStats {
   youtube: SourceStats;
   news: SourceStats;
   github: SourceStats;
+  papers: SourceStats;
   top_news_sources: NamedCount[];
   top_github_languages: NamedCount[];
   generated_at: string;

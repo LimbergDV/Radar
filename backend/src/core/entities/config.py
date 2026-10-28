@@ -31,6 +31,22 @@ class GoogleNewsConfig:
 
 
 @dataclass
+class PaperConfig:
+    """Qué papers de Hugging Face se sincronizan.
+
+    `keywords` sólo se usa para la búsqueda por relevancia; el Daily Papers es
+    un feed curado y entra completo dentro de `days_back`.
+    """
+
+    keywords: list[str] = field(default_factory=lambda: ["agents", "reasoning", "llm"])
+    max_results: int = 50
+    days_back: int = 7
+    include_daily: bool = True
+    include_search: bool = True
+    last_search_at: datetime | None = None
+
+
+@dataclass
 class GitHubConfig:
     keywords: list[str] = field(default_factory=lambda: ["openai", "claude", "langchain"])
     days_active: int = 2
