@@ -8,7 +8,7 @@ from pydantic import BaseModel
 class FeedItem(BaseModel):
     """Item normalizado de cualquier fuente, para pintar un feed homogeneo."""
 
-    source: str  # 'youtube' | 'news' | 'github'
+    source: str  # 'youtube' | 'news' | 'github' | 'papers'
     source_id: str
     title: str
     url: str
@@ -45,6 +45,7 @@ class FeedStats(BaseModel):
     youtube: SourceStats
     news: SourceStats
     github: SourceStats
+    papers: SourceStats
     top_news_sources: list[dict] = []
     top_github_languages: list[dict] = []
     generated_at: datetime

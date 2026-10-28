@@ -1,0 +1,113 @@
+<app-page-header
+  title="Papers"
+  eyebrow="Hugging Face"
+  icon="FileText"
+  description="Daily Papers y búsqueda por keywords: abstract, AI summary y enlaces a arXiv para leer el documento completo."
+>
+  <app-sync-button source="papers" variant="ghost" label="Sincronizar" (synced)="onSynced()" />
+</app-page-header>
+
+<div class="filters">
+  <div class="chips">
+    @for (window of windows; track window.label) {
+      <button
+        class="chip"
+        type="button"
+        [class.chip--on]="days() === window.value"
+        (click)="setDays(window.value)"
+      >
+        {{ window.value === null ? 'Todo' : 'Últimos ' + window.label }}
+      </button>
+    }
+  </div>
+
+  <div class="chips">
+    <button class="chip" type="button" [class.chip--on]="order() === 'recent'" (click)="setOrder('recent')">
+      Recientes
+    </button>
+    <button class="chip" type="button" [class.chip--on]="order() === 'top'" (click)="setOrder('top')">
+      Más votados
+    </button>
+  </div>
+
+  <label class="search">
+    <lucide-icon name="Search" [size]="14" aria-hidden="true" />
+    <input
+      type="search"
+      placeholder="Buscar en título y abstract"
+      [value]="search()"
+      (input)="onSearch($any($event.target).value)"
+    />
+  </label>
+</div>
+
+@if (loading() && !items().length) {
+  <div class="grid">
+    @for (i of [1, 2, 3, 4]; track i) {
+      <app-card-skeleton source="papers" />
+    }
+  </div>
+} @else if (error()) {
+  <app-empty-state icon="CircleAlert" title="No se pudieron cargar los papers" [message]="error()!" />
+} @else if (!items().length) {
+  <app-empty-state
+    icon="FileText"
+    title="Ningún paper coincide"
+    message="Prueba con otra ventana de tiempo, otra búsqueda o pulsa Sincronizar para traer los últimos de Hugging Face."
+  />
+} @else {
+  <div class="grid">
+    @for (paper of items(); track paper.id) {
+      <article class="card">
+        <a class="card__link" [routerLink]="['/papers', paper.id]">
+          <div class="card__eyebrow">
+            <span class="org">{{ authorLine(paper) }}</span>
+            <span class="dot" aria-hidden="true">·</span>
+            <time class="u-meta" [attr.datetime]="paper.published_at">
+              {{ paper.published_at | timeAgo }}
+            </time>
+            @if (paper.source === 'daily') {
+              <span class="flag">Daily</span>
+            }
+          </div>
+
+          <h3 class="card__title u-clamp-2">{{ paper.title }}</h3>
+
+          @if (paper.ai_summary) {
+            <p class="card__summary u-clamp-3">{{ paper.ai_summary }}</p>
+          } @else {
+            <p class="card__summary card__summary--muted u-clamp-3">Sin AI summary. Abre el paper para leer el abstract.</p>
+          }
+
+          @if (paper.ai_keywords.length) {
+            <div class="card__keywords">
+              @for (keyword of paper.ai_keywords.slice(0, 3); track keyword) {
+                <span class="keyword">{{ keyword }}</span>
+              }
+            </div>
+          }
+
+          <div class="card__metrics">
+            <span class="metric" title="Upvotes">
+              <lucide-icon name="Bookmark" [size]="12" aria-hidden="true" />
+              {{ paper.upvotes | compactNumber }}
+            </span>
+            <span class="metric" title="Comentarios">
+              <lucide-icon name="Hash" [size]="12" aria-hidden="true" />
+              {{ paper.comments | compactNumber }}
+            </span>
+            <span class="metric metric--right u-mono-label">{{ paper.id }}</span>
+          </div>
+        </a>
+      </article>
+    }
+  </div>
+
+  @if (hasMore()) {
+    <div class="more">
+      <button class="more__btn" type="button" [disabled]="loading()" (click)="resource.loadMore()">
+        {{ loading() ? 'Cargando…' : 'Cargar más' }}
+      </button>
+    </div>
+  }
+}

@@ -18,6 +18,7 @@ from src.core.logging_config import get_logger
 from src.infrastructure.database.models import (
     GitHubRepoModel,
     GoogleNewsArticleModel,
+    PaperModel,
     YouTubeVideoModel,
 )
 from src.infrastructure.database.session import AsyncSessionLocal
@@ -73,9 +74,19 @@ async def sync_github_job() -> None:
     await _run_sync("github", run)
 
 
+async def sync_papers_job() -> None:
+    from src.application.services.paper_service import PaperService
+
+    async def run() -> dict:
+        async with AsyncSessionLocal() as session:
+            return await PaperService(session).sync_papers()
+
+    await _run_sync("papers", run)
+
+
 async def sync_all_job() -> None:
-    """Sync de las tres fuentes, en serie (respetan el rate limit de cada API)."""
-    for job in (sync_youtube_job, sync_news_job, sync_github_job):
+    """Sync de las cuatro fuentes, en serie (respetan el rate limit de cada API)."""
+    for job in (sync_youtube_job, sync_news_job, sync_github_job, sync_papers_job):
         await job()
 
 
@@ -131,6 +142,7 @@ async def _needs_initial_sync() -> tuple[bool, str]:
     from src.infrastructure.database.repositories.google_news_pg_repo import (
         GoogleNewsRepository,
     )
+    from src.infrastructure.database.repositories.paper_pg_repo import PaperRepository
     from src.infrastructure.database.repositories.youtube_pg_repo import YouTubeRepository
 
     stale_minutes = settings.sync_interval_minutes
@@ -140,6 +152,7 @@ async def _needs_initial_sync() -> tuple[bool, str]:
             ("youtube", YouTubeVideoModel, YouTubeRepository),
             ("news", GoogleNewsArticleModel, GoogleNewsRepository),
             ("github", GitHubRepoModel, GitHubRepository),
+            ("papers", PaperModel, PaperRepository),
         )
 
         for name, model, repo_factory in checks:

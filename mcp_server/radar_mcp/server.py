@@ -21,8 +21,9 @@ logger = logging.getLogger(__name__)
 
 tools = RadarTools(settings=settings)
 
-INSTRUCTIONS = f"""Radar agrega noticias, videos de YouTube y repos de GitHub
-sobre inteligencia artificial, ya sincronizados y con el texto extraido.
+INSTRUCTIONS = f"""Radar agrega noticias, videos de YouTube, repos de GitHub y
+papers de Hugging Face sobre inteligencia artificial, ya sincronizados y con el
+texto extraido.
 
 Empieza siempre por `radar_stats`: te dice cuanto hay de cada fuente, cuando se
 sincronizó por última vez y qué keywords están activas. Sin eso estás
@@ -45,7 +46,7 @@ def build_server() -> FastMCP:
     @server.tool(
         name="radar_stats",
         description=(
-            "Volumen, frescura y configuración activa de las tres fuentes. "
+            "Volumen, frescura y configuración activa de las cuatro fuentes. "
             "Llámala primero: sin esto no sabes qué hay en la base."
         ),
     )
@@ -55,10 +56,10 @@ def build_server() -> FastMCP:
     @server.tool(
         name="radar_search",
         description=(
-            "Busca contenido en las tres fuentes a la vez. Devuelve summaries, "
+            "Busca contenido en las cuatro fuentes a la vez. Devuelve summaries, "
             "nunca el texto completo: para eso usa radar_get_video / "
-            "radar_get_article / radar_get_repo. Ojo: `query` busca por "
-            "subcadena en el título, no a través del texto."
+            "radar_get_article / radar_get_repo / radar_get_paper. Ojo: `query` "
+            "busca por subcadena en el título, no a través del texto."
         ),
     )
     async def radar_search(
@@ -111,11 +112,23 @@ def build_server() -> FastMCP:
         return await tools.get_repo(repo, content=content)
 
     @server.tool(
+        name="radar_get_paper",
+        description=(
+            "Detalle de un paper de Hugging Face por su id de arXiv "
+            "(p. ej. 2610.36082), con abstract, AI summary, autores, keywords y "
+            "enlaces a arXiv/PDF. `content='full'` devuelve los textos."
+        ),
+    )
+    async def radar_get_paper(paper_id: str, content: str = "summary") -> dict:
+        return await tools.get_paper(paper_id, content=content)
+
+    @server.tool(
         name="radar_get_context",
         description=(
             "Lee una porción de un contenido largo usando su content_id "
-            "(transcript:<video_id>, article:<article_id>, readme:<repo>). "
-            "Úsalo para no saturar la ventana con un README de 30k caracteres."
+            "(transcript:<video_id>, article:<article_id>, readme:<repo>, "
+            "paper:<arxiv_id>, paper_ai:<arxiv_id>). Úsalo para no saturar la "
+            "ventana con un README de 30k caracteres."
         ),
     )
     async def radar_get_context(
@@ -179,12 +192,15 @@ _SCHEMA = """# Radar: qué hay y qué puedes pedir
 | `youtube` | video | `transcript` (~4k chars) | `radar_get_video(id, content="full")` |
 | `news` | artículo | `content` (~2-4k chars) | `radar_get_article(id, content="full")` |
 | `github` | repo | `readme` (~17-34k chars) | `radar_get_context` por rangos |
+| `papers` | paper HF | `abstract` + `ai_summary` (~2-4k chars) | `radar_get_paper(id, content="full")` |
 
 ## Content ids
 
 - `transcript:<video_id>`
 - `article:<article_id>`
 - `readme:<owner/nombre>`
+- `paper:<arxiv_id>` (abstract)
+- `paper_ai:<arxiv_id>` (AI summary)
 
 ## Límites que conviene conocer
 
@@ -192,8 +208,9 @@ _SCHEMA = """# Radar: qué hay y qué puedes pedir
 - El presupuesto de caracteres por respuesta es configurable
   (RADAR_MAX_CONTENT_CHARS, 8000 por defecto). Lo que se pasa sale en
   `truncated: true` y `next_offset`.
-- `q` busca por **subcadena en el título** (y nombre+descripción en GitHub).
-  No busca dentro de transcripciones, artículos ni READMEs.
+- `q` busca por **subcadena en el título** (nombre+descripción en GitHub,
+  título+abstract en Papers). No busca dentro de transcripciones, artículos ni
+  READMEs.
 - `since_days` se aplica en cliente sobre la página devuelta, no en el servidor.
 - La base solo contiene lo que Radar ha sincronizado según las keywords
   activas. Si pides un tema del que no hay nada, no es que falle: es que no

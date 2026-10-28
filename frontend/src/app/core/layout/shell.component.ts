@@ -10,7 +10,7 @@ interface NavItem {
   path: string;
   label: string;
   icon: string;
-  source: 'youtube' | 'news' | 'github' | null;
+  source: 'youtube' | 'news' | 'github' | 'papers' | null;
 }
 
 const NAV: NavItem[] = [
@@ -18,6 +18,7 @@ const NAV: NavItem[] = [
   { path: '/youtube', label: 'YouTube', icon: 'Youtube', source: 'youtube' },
   { path: '/news', label: 'Noticias', icon: 'Newspaper', source: 'news' },
   { path: '/github', label: 'GitHub', icon: 'Github', source: 'github' },
+  { path: '/papers', label: 'Papers', icon: 'FileText', source: 'papers' },
   { path: '/settings', label: 'Configuración', icon: 'Settings', source: null },
 ];
 

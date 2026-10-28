@@ -7,6 +7,7 @@ const LABELS: Record<SourceId, string> = {
   youtube: 'YouTube',
   news: 'Noticias',
   github: 'GitHub',
+  papers: 'Papers',
 };
 
 @Component({
@@ -55,6 +56,10 @@ const LABELS: Record<SourceId, string> = {
 
     .badge--github {
       color: var(--color-carbon);
+    }
+
+    .badge--papers {
+      color: var(--color-mint);
     }
   `,
 })

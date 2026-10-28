@@ -17,7 +17,7 @@ from typing import Any
 from .client import RadarClient, RadarError
 from .config import Settings, settings as default_settings
 
-VALID_SOURCES = ("youtube", "news", "github")
+VALID_SOURCES = ("youtube", "news", "github", "papers")
 
 # Aviso que viaja con cada contenido de terceros. Va en el payload para que un
 # agente que lo lea lo tenga presente en el mismo mensaje.
@@ -163,13 +163,22 @@ def readme_content_id(repo: str) -> str:
     return f"readme:{repo}"
 
 
+def paper_content_id(paper_id: str) -> str:
+    return f"paper:{paper_id}"
+
+
+def paper_ai_content_id(paper_id: str) -> str:
+    return f"paper_ai:{paper_id}"
+
+
 def parse_content_id(content_id: str) -> tuple[str, str]:
     """'readme:owner/name' -> ('readme', 'owner/name')."""
     kind, _, rest = (content_id or "").partition(":")
     if not rest:
         raise RadarError(
             f"content_id inválido: {content_id!r}. Formatos: "
-            "transcript:<video_id>, article:<article_id>, readme:<repo_id|owner/name>"
+            "transcript:<video_id>, article:<article_id>, readme:<repo_id|owner/name>, "
+            "paper:<arxiv_id>, paper_ai:<arxiv_id>"
         )
     return kind.strip().lower(), rest.strip()
 
@@ -187,7 +196,7 @@ class RadarTools:
     # ── contexto ──
 
     async def stats(self) -> dict:
-        """Volumen, frescura y config activa de las tres fuentes."""
+        """Volumen, frescura y config activa de las cuatro fuentes."""
         stats = await self.client.get_json("/api/feed/stats")
 
         config: dict = {}
@@ -252,7 +261,8 @@ class RadarTools:
         if query:
             notes.append(
                 "`q` busca por subcadena en el título (y nombre+descripción en "
-                "GitHub). No es búsqueda a través de transcripción ni README."
+                "GitHub, título+abstract en Papers). No es búsqueda a través de "
+                "transcripción ni README."
             )
 
         return {
@@ -325,6 +335,36 @@ class RadarTools:
             result["resolved_from"] = resolved_from
         return result
 
+    async def get_paper(self, paper_id: str, content: str = "summary") -> dict:
+        """Detalle de un paper con abstract y AI summary.
+
+        Los papers son cortos (~2-4k chars), pero se mantiene el mismo contrato
+        que el resto: `summary` sólo anuncia disponibilidad y `full` entrega el
+        texto, para que un agente no vacíe su ventana sin querer.
+        """
+        paper_id = (paper_id or "").strip()
+        if not paper_id:
+            raise RadarError("Falta paper_id (el id de arXiv, p. ej. 2610.36082).")
+
+        paper = await self.client.get_json(f"/api/papers/{paper_id}")
+        return {
+            "paper": {k: v for k, v in paper.items() if k not in ("abstract", "ai_summary")},
+            "abstract": content_block(
+                paper.get("abstract"),
+                content_id=paper_content_id(paper_id),
+                mode=content,
+                budget=self.settings.max_content_chars,
+                missing_hint="Este paper no trae abstract en Hugging Face.",
+            ),
+            "ai_summary": content_block(
+                paper.get("ai_summary"),
+                content_id=paper_ai_content_id(paper_id),
+                mode=content,
+                budget=self.settings.max_content_chars,
+                missing_hint="Hugging Face no generó un AI summary para este paper.",
+            ),
+        }
+
     async def _resolve_repo(self, name: str) -> tuple[str, str]:
         """Traduce 'owner/nombre' al id numérico que usa la API.
 
@@ -372,9 +412,13 @@ class RadarTools:
             repo = ref if ref.isdigit() else (await self._resolve_repo(ref))[0]
             payload = await self.client.get_json(f"/api/github/repos/{repo}")
             text = payload.get("readme")
+        elif kind in ("paper", "paper_ai"):
+            payload = await self.client.get_json(f"/api/papers/{ref}")
+            text = payload.get("abstract" if kind == "paper" else "ai_summary")
         else:
             raise RadarError(
-                f"Tipo de contenido desconocido: {kind!r}. Usa transcript, article o readme."
+                f"Tipo de contenido desconocido: {kind!r}. Usa transcript, article, "
+                "readme, paper o paper_ai."
             )
 
         return clip(text, content_id=content_id, budget=budget, offset=offset)

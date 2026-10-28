@@ -8,6 +8,7 @@ Sirve para dos cosas:
     python -m radar_mcp.cli search --source news --limit 5
     python -m radar_mcp.cli repo NousResearch/hermes-agent --full
     python -m radar_mcp.cli article <id> --full
+    python -m radar_mcp.cli paper 2610.36082 --full
     python -m radar_mcp.cli context readme:NousResearch/hermes-agent --limit 800
 """
 
@@ -129,6 +130,18 @@ async def cmd_repo(args) -> int:
     return 0
 
 
+async def cmd_paper(args) -> int:
+    payload = await _tools().get_paper(args.id, content="full" if args.full else "summary")
+    print(f"\n{payload['paper']['title']}")
+    emit(
+        {k: v for k, v in payload["paper"].items() if k not in ("abstract", "ai_summary")},
+        args.json,
+    )
+    print_content_block(payload["abstract"])
+    print_content_block(payload["ai_summary"])
+    return 0
+
+
 async def cmd_context(args) -> int:
     payload = await _tools().get_context(args.content_id, offset=args.offset, limit=args.limit)
     print(f"\n{payload['content_id']}")
@@ -153,9 +166,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("stats", help="Totales, frescura y keywords activas")
 
-    search = sub.add_parser("search", help="Busca en las tres fuentes")
+    search = sub.add_parser("search", help="Busca en las cuatro fuentes")
     search.add_argument("-q", "--query", help="Subcadena del título")
-    search.add_argument("-s", "--source", choices=["youtube", "news", "github"])
+    search.add_argument("-s", "--source", choices=["youtube", "news", "github", "papers"])
     search.add_argument("-l", "--language")
     search.add_argument("-d", "--since-days", type=int)
     search.add_argument("-n", "--limit", type=int)
@@ -172,8 +185,15 @@ def build_parser() -> argparse.ArgumentParser:
     repo.add_argument("repo")
     repo.add_argument("--full", action="store_true")
 
+    paper = sub.add_parser("paper", help="Detalle de un paper de Hugging Face")
+    paper.add_argument("id", help="Id de arXiv, p. ej. 2610.36082")
+    paper.add_argument("--full", action="store_true")
+
     context = sub.add_parser("context", help="Lee un contenido largo por rangos")
-    context.add_argument("content_id", help="readme:owner/nombre, transcript:<id>, article:<id>")
+    context.add_argument(
+        "content_id",
+        help="readme:owner/nombre, transcript:<id>, article:<id>, paper:<id>, paper_ai:<id>",
+    )
     context.add_argument("--offset", type=int, default=0)
     context.add_argument("-n", "--limit", type=int)
     context.add_argument("--full", action="store_true")
@@ -188,6 +208,7 @@ async def main_async(args) -> int:
         "video": cmd_video,
         "article": cmd_article,
         "repo": cmd_repo,
+        "paper": cmd_paper,
         "context": cmd_context,
     }
     try:

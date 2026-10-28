@@ -71,6 +71,25 @@ export const routes: Routes = [
       },
 
       {
+        path: 'papers',
+        title: 'Papers · Radar',
+        children: [
+          {
+            path: '',
+            loadComponent: () =>
+              import('./features/papers/papers-list.component').then((m) => m.PapersListComponent),
+          },
+          {
+            path: ':id',
+            loadComponent: () =>
+              import('./features/papers/papers-detail.component').then(
+                (m) => m.PapersDetailComponent,
+              ),
+          },
+        ],
+      },
+
+      {
         path: 'settings',
         title: 'Configuración · Radar',
         loadComponent: () =>

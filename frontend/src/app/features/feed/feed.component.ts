@@ -51,6 +51,7 @@ export class FeedComponent {
     { value: 'youtube', label: 'YouTube', icon: 'Youtube' },
     { value: 'news', label: 'Noticias', icon: 'Newspaper' },
     { value: 'github', label: 'GitHub', icon: 'Github' },
+    { value: 'papers', label: 'Papers', icon: 'FileText' },
   ];
 
   private searchTimer?: ReturnType<typeof setTimeout>;

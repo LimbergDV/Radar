@@ -45,7 +45,7 @@ class TestBackendIsAlive:
     async def test_stats_responds(self, live_tools):
         stats = await live_tools.stats()
         assert stats["total_items"] > 0, "la base de Radar está vacía"
-        for source in ("youtube", "news", "github"):
+        for source in ("youtube", "news", "github", "papers"):
             assert stats["sources"][source]["total"] >= 0
 
     @pytest.mark.asyncio
@@ -65,7 +65,7 @@ class TestSearch:
 
     @pytest.mark.asyncio
     async def test_search_by_source(self, live_tools):
-        for source in ("youtube", "news", "github"):
+        for source in ("youtube", "news", "github", "papers"):
             result = await live_tools.search(source=source, limit=3)
             assert all(item["source"] == source for item in result["items"])
 
@@ -128,6 +128,22 @@ class TestContentIsReadable:
                 assert video["transcript"]["available"] is False
 
         assert with_transcript > 0, "ninguno de los videos recientes trae transcripción"
+
+    @pytest.mark.asyncio
+    async def test_a_paper_has_abstract_and_ai_summary(self, live_tools):
+        found = await live_tools.search(source="papers", limit=3)
+        readable = 0
+
+        for item in found["items"]:
+            paper = await live_tools.get_paper(item["source_id"], content="full")
+            if paper["abstract"]["total_chars"] > 0:
+                readable += 1
+                assert paper["abstract"]["chars_returned"] > 0
+                assert paper["paper"]["arxiv_url"].startswith("https://arxiv.org/abs/")
+            else:
+                assert paper["abstract"]["available"] is False
+
+        assert readable > 0, "ninguno de los papers trae abstract"
 
     @pytest.mark.asyncio
     async def test_context_reads_a_range(self, live_tools):

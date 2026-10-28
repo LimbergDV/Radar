@@ -13,6 +13,9 @@ import type {
   GoogleNewsArticleSummary,
   GoogleNewsConfig,
   HealthStatus,
+  PaperConfig,
+  PaperDetail,
+  PaperSummary,
   SourceId,
   SyncResult,
   YouTubeConfig,
@@ -141,5 +144,35 @@ export class RadarApiService {
 
   updateGitHubConfig(config: GitHubConfig): Observable<GitHubConfig> {
     return this.http.put<GitHubConfig>(`${this.base}/github/config`, config);
+  }
+
+  // ── Papers de Hugging Face ──
+
+  getPapers(
+    options: ListParams & {
+      q?: string | null;
+      since_days?: number | null;
+      order?: 'recent' | 'top' | null;
+    } = {},
+  ): Observable<PaperSummary[]> {
+    return this.http.get<PaperSummary[]>(`${this.base}/papers`, {
+      params: toParams(options),
+    });
+  }
+
+  getPaper(id: string): Observable<PaperDetail> {
+    return this.http.get<PaperDetail>(`${this.base}/papers/${encodeURIComponent(id)}`);
+  }
+
+  syncPapers(): Observable<SyncResult> {
+    return this.http.post<SyncResult>(`${this.base}/papers/sync`, null);
+  }
+
+  getPapersConfig(): Observable<PaperConfig> {
+    return this.http.get<PaperConfig>(`${this.base}/papers/config`);
+  }
+
+  updatePapersConfig(config: PaperConfig): Observable<PaperConfig> {
+    return this.http.put<PaperConfig>(`${this.base}/papers/config`, config);
   }
 }

@@ -44,10 +44,15 @@ def server():
 
 class TestHandshake:
     @pytest.mark.asyncio
-    async def test_lists_seven_tools(self, server):
+    async def test_lists_eight_tools(self, server):
         tools = await server.list_tools()
-        assert len(tools) == 7
-        assert {t.name for t in tools} >= {"radar_stats", "radar_search", "radar_get_repo"}
+        assert len(tools) == 8
+        assert {t.name for t in tools} >= {
+            "radar_stats",
+            "radar_search",
+            "radar_get_repo",
+            "radar_get_paper",
+        }
 
     @pytest.mark.asyncio
     async def test_every_tool_documents_its_parameters(self, server):

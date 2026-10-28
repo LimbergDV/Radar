@@ -18,6 +18,7 @@ from src.presentation.routers import (
     feed_router,
     github_router,
     google_news_router,
+    paper_router,
     youtube_router,
 )
 
@@ -59,6 +60,7 @@ app.add_middleware(
 app.include_router(youtube_router.router, prefix="/api/youtube", tags=["YouTube"])
 app.include_router(google_news_router.router, prefix="/api/news", tags=["Google News"])
 app.include_router(github_router.router, prefix="/api/github", tags=["GitHub"])
+app.include_router(paper_router.router, prefix="/api/papers", tags=["Papers"])
 app.include_router(feed_router.router, prefix="/api", tags=["Feed"])
 
 

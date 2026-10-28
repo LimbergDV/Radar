@@ -73,7 +73,7 @@ export class SyncButtonComponent {
   private readonly api = inject(RadarApiService);
   private readonly toasts = inject(ToastService);
 
-  /** Fuente a sincronizar. `null` = las tres. */
+  /** Fuente a sincronizar. `null` = todas. */
   readonly source = input<SourceId | null>(null);
   readonly variant = input<'solid' | 'ghost'>('solid');
   readonly label = input<string>('Sincronizar');
@@ -87,6 +87,7 @@ export class SyncButtonComponent {
     youtube: () => this.api.syncYouTube(),
     news: () => this.api.syncNews(),
     github: () => this.api.syncGitHub(),
+    papers: () => this.api.syncPapers(),
   };
 
   async run(): Promise<void> {
@@ -95,7 +96,9 @@ export class SyncButtonComponent {
     }
     this.running.set(true);
 
-    const sources: SourceId[] = this.source() ? [this.source() as SourceId] : ['youtube', 'news', 'github'];
+    const sources: SourceId[] = this.source()
+      ? [this.source() as SourceId]
+      : ['youtube', 'news', 'github', 'papers'];
 
     try {
       const results: SyncResult[] = [];

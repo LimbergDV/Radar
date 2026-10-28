@@ -123,6 +123,66 @@ class GitHubRepoModel(Base):
     )
 
 
+class PaperModel(Base):
+    """Paper de Hugging Face con su abstract, AI summary y enlaces.
+
+    Se guarda el texto pero no el PDF: la app lee el abstract y el resumen, y
+    enlaza a arXiv para el documento completo.
+    """
+
+    __tablename__ = "papers"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    title: Mapped[str] = mapped_column(Text, default="")
+    abstract: Mapped[str] = mapped_column(Text, default="")
+    ai_summary: Mapped[str] = mapped_column(Text, default="")
+    ai_keywords: Mapped[list] = mapped_column(JSONB, default=list)
+    authors: Mapped[list] = mapped_column(JSONB, default=list)
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    submitted_on_daily_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    upvotes: Mapped[int] = mapped_column(Integer, default=0)
+    comments: Mapped[int] = mapped_column(Integer, default=0)
+    thumbnail_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    github_repo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    project_page: Mapped[str | None] = mapped_column(Text, nullable=True)
+    organization: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    linked_models: Mapped[list] = mapped_column(JSONB, default=list)
+    linked_datasets: Mapped[list] = mapped_column(JSONB, default=list)
+    linked_spaces: Mapped[list] = mapped_column(JSONB, default=list)
+    hf_url: Mapped[str] = mapped_column(Text, default="")
+    arxiv_url: Mapped[str] = mapped_column(Text, default="")
+    pdf_url: Mapped[str] = mapped_column(Text, default="")
+    # 'daily' si apareció en el feed curado; 'search' si entró por keywords.
+    source: Mapped[str] = mapped_column(String(20), default="daily")
+    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+    __table_args__ = (
+        Index("ix_papers_published_at", "published_at"),
+        Index("ix_papers_daily_at", "submitted_on_daily_at"),
+        Index("ix_papers_upvotes", "upvotes"),
+        Index("ix_papers_synced_at", "synced_at"),
+    )
+
+
+class PaperConfigModel(Base):
+    __tablename__ = "paper_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    keywords: Mapped[list] = mapped_column(
+        JSONB, default=lambda: ["agents", "reasoning", "llm"]
+    )
+    max_results: Mapped[int] = mapped_column(Integer, default=50)
+    days_back: Mapped[int] = mapped_column(Integer, default=7)
+    include_daily: Mapped[bool] = mapped_column(Boolean, default=True)
+    include_search: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_search_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=now_utc, onupdate=now_utc
+    )
+
+
 class GitHubConfigModel(Base):
     __tablename__ = "github_config"
 

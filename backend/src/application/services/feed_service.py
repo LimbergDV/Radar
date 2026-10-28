@@ -17,11 +17,12 @@ from src.application.dtos.feed_dto import (
 from src.core.logging_config import get_logger
 from src.infrastructure.database.repositories.github_pg_repo import GitHubRepository
 from src.infrastructure.database.repositories.google_news_pg_repo import GoogleNewsRepository
+from src.infrastructure.database.repositories.paper_pg_repo import PaperRepository
 from src.infrastructure.database.repositories.youtube_pg_repo import YouTubeRepository
 
 logger = get_logger(__name__)
 
-VALID_SOURCES = ("youtube", "news", "github")
+VALID_SOURCES = ("youtube", "news", "github", "papers")
 
 
 class FeedService:
@@ -52,6 +53,8 @@ class FeedService:
             items.extend(await self._news_items(per_source, language, query))
         if "github" in selected:
             items.extend(await self._github_items(per_source, query))
+        if "papers" in selected:
+            items.extend(await self._paper_items(per_source, query))
 
         items.sort(key=lambda i: i.published_at, reverse=True)
 
@@ -145,15 +148,48 @@ class FeedService:
             if _matches_query(f"{repo.full_name} {repo.description}", query)
         ]
 
+    async def _paper_items(self, limit, query) -> list[FeedItem]:
+        repo = PaperRepository(self.session)
+        papers = await repo.get_papers(limit=limit, order="recent")
+        return [
+            FeedItem(
+                source="papers",
+                source_id=paper.id,
+                title=paper.title,
+                url=paper.hf_url,
+                published_at=paper.effective_date,
+                description=(paper.ai_summary or paper.abstract)[:280],
+                image_url=paper.thumbnail_url,
+                author=paper.organization
+                or (paper.authors[0] if paper.authors else None),
+                language=None,
+                stats={
+                    "upvotes": paper.upvotes,
+                    "comments": paper.comments,
+                },
+                extra={
+                    "arxiv_url": paper.arxiv_url,
+                    "pdf_url": paper.pdf_url,
+                    "keywords": paper.ai_keywords[:3],
+                    "has_ai_summary": bool(paper.ai_summary),
+                    "github_repo": paper.github_repo,
+                },
+            )
+            for paper in papers
+            if _matches_query(f"{paper.title} {paper.abstract}", query)
+        ]
+
     async def get_stats(self) -> FeedStats:
         """Totales, ultima sync y rankings para el dashboard."""
         yt_repo = YouTubeRepository(self.session)
         news_repo = GoogleNewsRepository(self.session)
         gh_repo = GitHubRepository(self.session)
+        paper_repo = PaperRepository(self.session)
 
         yt_config = await yt_repo.get_config()
         news_config = await news_repo.get_config()
         gh_config = await gh_repo.get_config()
+        paper_config = await paper_repo.get_config()
 
         youtube = SourceStats(
             total=await yt_repo.count_videos(),
@@ -170,12 +206,18 @@ class FeedService:
             last_sync_at=gh_config.last_search_at,
             latest_item_at=await gh_repo.latest_repo_date(),
         )
+        papers = SourceStats(
+            total=await paper_repo.count_papers(),
+            last_sync_at=paper_config.last_search_at,
+            latest_item_at=await paper_repo.latest_paper_date(),
+        )
 
         return FeedStats(
-            total_items=youtube.total + news.total + github.total,
+            total_items=youtube.total + news.total + github.total + papers.total,
             youtube=youtube,
             news=news,
             github=github,
+            papers=papers,
             top_news_sources=[
                 {"name": name, "count": count}
                 for name, count in await news_repo.top_sources(5)

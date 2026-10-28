@@ -1,7 +1,8 @@
 # Radar MCP — servidor para agentes
 
-Expone el contenido de Radar (noticias, videos de YouTube, repos de GitHub) a
-agentes externos como Claude Code, Claude Desktop o Cursor.
+Expone el contenido de Radar (noticias, videos de YouTube, repos de GitHub y
+papers de Hugging Face) a agentes externos como Claude Code, Claude Desktop o
+Cursor.
 
 **Solo lectura.** No cambia la configuración ni dispara sincronizaciones: la
 herramienta de sync viene apagada a propósito.
@@ -83,6 +84,9 @@ Manage MCP Servers -> View raw config**, y ahi pegas el bloque de arriba.
 > Busca repos de agentes y usa radar_get_context para leerme el README de los dos
 > más populares.
 
+> ¿Qué papers de Hugging Face hay sobre razonamiento? Léeme el abstract y el AI
+> summary del más votado.
+
 ## Probarlo sin IA: el CLI
 
 Hay un CLI que habla con la misma API por debajo. Sirve para comprobar que todo
@@ -97,6 +101,7 @@ radar-cli search --source news --limit 5              # buscar
 radar-cli repo NousResearch/hermes-agent              # detalle por nombre
 radar-cli article <id> --full                         # leer una noticia entera
 radar-cli video <id> --full                           # leer una transcripción
+radar-cli paper 2610.36082 --full                     # abstract + AI summary
 radar-cli context readme:<owner/nombre> --limit 800   # leer un README por rangos
 radar-cli search --json                                # salida en JSON crudo
 ```
@@ -109,10 +114,11 @@ Probado contra la app desplegada: `radar-cli stats` devuelve 665 items y
 | Herramienta | Para qué |
 |---|---|
 | `radar_stats` | Volumen, frescura y keywords activas. **Empieza siempre por aquí.** |
-| `radar_search` | Busca en las tres fuentes. Devuelve summaries, no texto completo. |
+| `radar_search` | Busca en las cuatro fuentes. Devuelve summaries, no texto completo. |
 | `radar_get_video` | Video + transcripción (`content="full"` la trae recortada) |
 | `radar_get_article` | Noticia + cuerpo del artículo |
 | `radar_get_repo` | Repo + README. Acepta id o `owner/nombre` |
+| `radar_get_paper` | Paper HF + abstract + AI summary. Acepta id de arXiv (`2610.36082`) |
 | `radar_get_context` | Lee un contenido largo **por rangos**, con su `content_id` |
 | `radar_sync` | Desactivada (ver abajo) |
 
@@ -170,7 +176,10 @@ Si fallan, revisar primero si el backend está caído: el error lo dice.
 ## Límites conocidos
 
 - **`q` busca por subcadena en el título**, no a través de transcripción,
-  artículo ni README. Es la debilidad más visible de la API actual.
+  artículo ni README. En Papers también busca en el abstract.
+- **Los papers se leen desde Hugging Face, no desde el PDF.** Radar guarda el
+  abstract y el AI summary; `radar_get_paper` enlaza a arXiv y PDF para el texto
+  completo. No hay extracción de PDF.
 - **`since_days` se filtra en cliente** sobre la página devuelta, no en el
   servidor (`/api/feed` no lo expone).
 - **~60% de las noticias tienen cuerpo.** El resto son paywalls o sitios que

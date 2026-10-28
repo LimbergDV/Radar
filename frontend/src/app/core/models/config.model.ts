@@ -37,6 +37,16 @@ export interface GitHubConfig {
   last_search_at: string | null;
 }
 
+export interface PaperConfig {
+  keywords: string[];
+  max_results: number;
+  /** Ventana de frescura en días: Daily Papers y búsqueda. */
+  days_back: number;
+  include_daily: boolean;
+  include_search: boolean;
+  last_search_at: string | null;
+}
+
 /** Respuesta de `POST /api/{fuente}/sync`. */
 export interface SyncResult {
   status: string;
