@@ -70,6 +70,33 @@
       </div>
     </form>
   }
+
+  @if (transcripts(); as st) {
+    <section class="transcripts">
+      <div class="transcripts__head">
+        <h3>Transcripciones</h3>
+        <span class="u-meta">
+          {{ st.with_transcript }} de {{ st.total_videos }} videos · {{ st.coverage_percent }}%
+        </span>
+      </div>
+
+      <p class="u-meta transcripts__hint">
+        Los videos nuevos se transcriben al sincronizar. Los que ya estaban guardados sin
+        texto se rellenan aquí, 20 por pasada: cada uno que YouTube bloquea gasta una
+        petición del plan gratuito ({{ st.fallback.used_by_app }}/{{ st.fallback.app_budget }}
+        usadas este mes).
+      </p>
+
+      @if (st.missing_transcript > 0) {
+        <button class="btn btn--ghost" type="button" [disabled]="backfilling()" (click)="backfillTranscripts()">
+          <lucide-icon [name]="backfilling() ? 'Loader' : 'FileText'" [size]="14" aria-hidden="true" />
+          {{ backfilling() ? 'Rellenando…' : 'Rellenar 20 transcripciones' }}
+        </button>
+      } @else {
+        <p class="u-meta">Todos los videos guardados tienen transcripción.</p>
+      }
+    </section>
+  }
 }
 
 @if (tab() === 'news') {

@@ -142,6 +142,60 @@ def keep_since_days(items: list[dict], since_days: int | None) -> list[dict]:
     return kept
 
 
+# Texto que el backend guarda cuando no pudo obtener la transcripción. Tiene
+# 27 caracteres, así que un `if text:` lo daría por bueno.
+NO_TRANSCRIPT = "Transcripción no disponible"
+
+
+def has_content(text: str | None) -> bool:
+    """True solo si el texto es contenido real (ni vacío ni el placeholder)."""
+    cleaned = (text or "").strip()
+    return bool(cleaned) and cleaned != NO_TRANSCRIPT
+
+
+def find_matches(
+    text: str,
+    query: str,
+    *,
+    context: int = 140,
+    limit: int = 20,
+) -> list[dict]:
+    """Apariciones de `query` en `text`, con contexto alrededor.
+
+    Búsqueda por subcadena sin distinguir mayúsculas, igual que el resto del
+    proyecto: no hay índice invertido y montar uno para esto no compensa.
+
+    Devuelve `offset` (posición exacta del término, no del snippet) para que el
+    agente pueda pedir la zona con `radar_get_context` si necesita más.
+    """
+    needle = (query or "").strip().lower()
+    if not needle:
+        return []
+
+    haystack = (text or "").lower()
+    matches: list[dict] = []
+    start = 0
+
+    while len(matches) < limit:
+        index = haystack.find(needle, start)
+        if index < 0:
+            break
+
+        left = max(0, index - context)
+        right = min(len(text), index + len(needle) + context)
+        matches.append(
+            {
+                "offset": index,
+                "snippet": text[left:right].strip(),
+                "truncated_before": left > 0,
+                "truncated_after": right < len(text),
+            }
+        )
+        start = index + len(needle)
+
+    return matches
+
+
 def matches_repo_name(candidate: str, wanted: str) -> bool:
     """True si `candidate` es el repo buscado (o su sufijo)."""
     left = (candidate or "").lower()
@@ -161,6 +215,15 @@ def article_content_id(article_id: str) -> str:
 
 def readme_content_id(repo: str) -> str:
     return f"readme:{repo}"
+
+
+def repo_fields(detail: dict) -> dict:
+    """El repo sin su README: el texto y los metadatos viajan separados.
+
+    Un README de 30k chars mezclado con estrellas y topics en el mismo objeto
+    obliga a quien lo lea a descartar manualmente lo que no es texto.
+    """
+    return {k: v for k, v in detail.items() if k != "readme"}
 
 
 def paper_content_id(paper_id: str) -> str:
@@ -284,11 +347,93 @@ class RadarTools:
         return {
             "video": {k: v for k, v in video.items() if k != "transcript"},
             "transcript": content_block(
-                video.get("transcript"),
+                # El placeholder no es contenido: pasarlo tal cual haría que
+                # `available` fuera True con 27 caracteres de relleno.
+                video.get("transcript") if has_content(video.get("transcript")) else None,
                 content_id=video_content_id(video_id),
                 mode=content,
                 budget=self.settings.max_content_chars,
                 missing_hint="Este video no tiene transcripción.",
+            ),
+        }
+
+    async def get_transcript(
+        self,
+        video_id: str,
+        query: str | None = None,
+        offset: int = 0,
+        limit: int | None = None,
+    ) -> dict:
+        """Transcripción de un video, completa o buscando dentro de ella.
+
+        Existe aparte de `radar_get_video` porque una transcripción de una hora
+        pasa de 40.000 caracteres: leerla entera para encontrar una frase quema
+        la ventana del agente. Con `query` se devuelven las apariciones con
+        contexto; sin él, una ventana con su `next_offset`.
+
+        `content_block` y `clip` se evitan aquí a propósito: el primero trata el
+        placeholder como contenido válido (tiene 27 chars) y el segundo no busca.
+        """
+        video_id = (video_id or "").strip()
+        if not video_id:
+            raise RadarError("Falta video_id.")
+
+        video = await self.client.get_json(f"/api/youtube/videos/{video_id}")
+        raw = video.get("transcript")
+        text = raw if has_content(raw) else None
+        content_id = video_content_id(video_id)
+
+        summary = {
+            "id": video.get("id", video_id),
+            "title": video.get("title"),
+            "channel": video.get("channel"),
+            "url": video.get("url"),
+            "published_at": video.get("published_at"),
+            "duration_seconds": video.get("duration_seconds"),
+            "language": video.get("language"),
+        }
+
+        if not text:
+            return {
+                "video": summary,
+                "transcript": content_block(
+                    None,
+                    content_id=content_id,
+                    mode="full",
+                    budget=self.settings.max_content_chars,
+                    missing_hint=(
+                        "Este video no tiene transcripción. No es un fallo de la "
+                        "herramienta: algunos videos (directos, música, sin "
+                        "subtítulos) nunca la tendrán."
+                    ),
+                ),
+            }
+
+        if query:
+            found = find_matches(text, query)
+            return {
+                "video": summary,
+                "content_id": content_id,
+                "untrusted": True,
+                "note": UNTRUSTED_NOTE,
+                "query": query,
+                "match_count": len(found),
+                "total_chars": len(text),
+                "matches": found,
+                "hint": (
+                    None if found else
+                    "Ese término no aparece en la transcripción. Prueba otra "
+                    "palabra o lee por rangos con offset/limit."
+                ),
+            }
+
+        return {
+            "video": summary,
+            "transcript": clip(
+                text,
+                content_id=content_id,
+                budget=limit if limit and limit > 0 else self.settings.max_content_chars,
+                offset=offset,
             ),
         }
 
@@ -311,6 +456,96 @@ class RadarTools:
 
     async def get_repo(self, repo: str, content: str = "summary") -> dict:
         """Detalle de un repo. `repo` acepta id numérico o `owner/nombre`."""
+        detail, _, content_id, resolved_from = await self._load_readme(repo)
+
+        result: dict = {
+            "repo": repo_fields(detail),
+            "readme": content_block(
+                detail.get("readme"),
+                content_id=content_id,
+                mode=content,
+                budget=self.settings.max_content_chars,
+                missing_hint="Este repo no tiene README.",
+            ),
+        }
+        if resolved_from:
+            result["resolved_from"] = resolved_from
+        return result
+
+    async def get_readme(
+        self,
+        repo: str,
+        query: str | None = None,
+        offset: int = 0,
+        limit: int | None = None,
+    ) -> dict:
+        """README completo, o las apariciones de `query` dentro de él.
+
+        Existe aparte de `radar_get_repo` por la misma razón que
+        `radar_get_transcript` existe aparte de `radar_get_video`: un README de
+        proyecto serio pasa de 15.000 caracteres, y leerlo entero por rangos
+        para encontrar "cómo se instala" gasta la ventana del agente. Con
+        `query` devuelve cada aparición con su contexto y su offset exacto.
+        """
+        detail, text, content_id, resolved_from = await self._load_readme(repo)
+
+        result: dict = {"repo": repo_fields(detail)}
+        if resolved_from:
+            result["resolved_from"] = resolved_from
+
+        if not text:
+            result["readme"] = content_block(
+                None,
+                content_id=content_id,
+                mode="full",
+                budget=self.settings.max_content_chars,
+                missing_hint=(
+                    "Este repo no tiene README en la base. No es un fallo de "
+                    "la herramienta: Radar guarda el README que devolvió "
+                    "GitHub, y algunos repos no traen ninguno."
+                ),
+            )
+            return result
+
+        if query:
+            found = find_matches(text, query)
+            result.update(
+                {
+                    "content_id": content_id,
+                    "untrusted": True,
+                    "note": UNTRUSTED_NOTE,
+                    "query": query,
+                    "match_count": len(found),
+                    "total_chars": len(text),
+                    "matches": found,
+                    "hint": (
+                        None
+                        if found
+                        else "Ese término no aparece en el README. Prueba otra "
+                        "palabra o lee por rangos con offset/limit."
+                    ),
+                }
+            )
+            return result
+
+        result["readme"] = clip(
+            text,
+            content_id=content_id,
+            budget=limit if limit and limit > 0 else self.settings.max_content_chars,
+            offset=offset,
+        )
+        return result
+
+    async def _load_readme(self, repo: str) -> tuple[dict, str | None, str, str | None]:
+        """Resuelve el repo y devuelve (detalle, texto, content_id, resuelto_desde).
+
+        Los tres call sites (get_repo, get_readme, get_context) necesitan lo
+        mismo, y resolver un `owner/nombre` cuesta una petición al feed: tenerlo
+        en un solo sitio evita que se desincronicen y que se repita la llamada.
+
+        El texto sale normalizado a `None` cuando no hay contenido real, para
+        que quien lo consuma no tenga que recordar que "" no es un README.
+        """
         repo = (repo or "").strip()
         if not repo:
             raise RadarError("Falta repo: id numérico o 'owner/nombre'.")
@@ -320,20 +555,9 @@ class RadarTools:
             repo, resolved_from = await self._resolve_repo(repo)
 
         detail = await self.client.get_json(f"/api/github/repos/{repo}")
-
-        result: dict = {
-            "repo": {k: v for k, v in detail.items() if k != "readme"},
-            "readme": content_block(
-                detail.get("readme"),
-                content_id=readme_content_id(detail.get("full_name") or repo),
-                mode=content,
-                budget=self.settings.max_content_chars,
-                missing_hint="Este repo no tiene README.",
-            ),
-        }
-        if resolved_from:
-            result["resolved_from"] = resolved_from
-        return result
+        raw = detail.get("readme")
+        text = raw if has_content(raw) else None
+        return detail, text, readme_content_id(detail.get("full_name") or repo), resolved_from
 
     async def get_paper(self, paper_id: str, content: str = "summary") -> dict:
         """Detalle de un paper con abstract y AI summary.
@@ -405,13 +629,13 @@ class RadarTools:
         if kind == "transcript":
             payload = await self.client.get_json(f"/api/youtube/videos/{ref}")
             text = payload.get("transcript")
+            if not has_content(text):
+                text = None
         elif kind == "article":
             payload = await self.client.get_json(f"/api/news/articles/{ref}")
             text = payload.get("content")
         elif kind == "readme":
-            repo = ref if ref.isdigit() else (await self._resolve_repo(ref))[0]
-            payload = await self.client.get_json(f"/api/github/repos/{repo}")
-            text = payload.get("readme")
+            _, text, _, _ = await self._load_readme(ref)
         elif kind in ("paper", "paper_ai"):
             payload = await self.client.get_json(f"/api/papers/{ref}")
             text = payload.get("abstract" if kind == "paper" else "ai_summary")

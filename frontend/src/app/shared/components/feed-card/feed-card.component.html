@@ -47,6 +47,10 @@
           <span class="card__flag">sin resumen</span>
         }
 
+        @if (item().source === 'youtube' && item().extra.has_transcript === false) {
+          <span class="card__flag">sin transcripción</span>
+        }
+
         @if (item().source === 'github' && item().extra.topics?.length) {
           <span class="card__topic">{{ item().extra.topics![0] }}</span>
         }

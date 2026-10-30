@@ -1,11 +1,11 @@
-import { ChangeDetectionStrategy, Component, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
 import { LucideAngularModule } from 'lucide-angular';
 import { RouterLink } from '@angular/router';
 
 import { RadarApiService } from '../../core/api/radar-api.service';
 import { useRouteResource } from '../../core/hooks/use-route-resource';
-import type { GitHubRepoDetail } from '../../core/models';
+import { renderReadme } from '../../shared/markdown/readme-renderer';
 import { CompactNumberPipe } from '../../shared/pipes/format.pipes';
 import { TimeAgoPipe } from '../../shared/pipes/time-ago.pipe';
 
@@ -27,29 +27,21 @@ export class GithubDetailComponent {
 
   protected readonly resource = useRouteResource(this.id, (id) => this.api.getRepo(id));
 
-  /** Vista previa del README en texto plano: sin HTML ni estilos inline. */
-  protected readonly readmePreview = signal<SafeHtml | null>(null);
-
   /**
-   * El README llega como markdown crudo y lo mostramos preformateado. Antes de
-   * inyectarlo se escapan `& < >`, así que un `<script>` en el README se
-   * muestra como texto en vez de ejecutarse.
+   * README ya convertido de markdown a HTML y saneado.
+   *
+   * Es `computed` y no un signal con caché manual a propósito: así, al cambiar
+   * de repo en la misma vista, se recalcula en vez de dejar el anterior.
+   *
+   * `bypassSecurityTrustHtml` es seguro aquí porque `renderReadme` pasa el HTML
+   * por DOMPurify antes de devolverlo.
    */
-  protected readmeOf(repo: GitHubRepoDetail): SafeHtml | null {
-    if (!repo.readme) {
+  protected readonly readmeHtml = computed<SafeHtml | null>(() => {
+    const repo = this.resource.data();
+    if (!repo?.readme) {
       return null;
     }
-    if (!this.readmePreview()) {
-      this.readmePreview.set(
-        this.sanitizer.bypassSecurityTrustHtml(
-          repo.readme
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .slice(0, README_MAX_CHARS),
-        ),
-      );
-    }
-    return this.readmePreview();
-  }
+    const html = renderReadme(repo.readme.slice(0, README_MAX_CHARS), repo);
+    return this.sanitizer.bypassSecurityTrustHtml(html);
+  });
 }

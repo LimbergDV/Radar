@@ -53,4 +53,79 @@ export class YoutubeDetailComponent {
   protected wordCount(text: string): number {
     return text.trim().split(/\s+/).filter(Boolean).length;
   }
+
+  /** Minutos de lectura a ~200 palabras/minuto, mínimo 1. */
+  protected readingMinutes(text: string): number {
+    return Math.max(1, Math.round(this.wordCount(text) / 200));
+  }
+
+  /**
+   * La transcripción llega como un único bloque sin saltos de línea: YouTube la
+   * entrega así. Partirla en párrafos es lo que la hace legible; sin esto son
+   * miles de caracteres en un solo muro de texto.
+   */
+  protected readonly transcriptParagraphs = computed<string[]>(() => {
+    const text = this.resource.data()?.transcript ?? '';
+    return this.hasTranscript(text) ? splitIntoParagraphs(text) : [];
+  });
+}
+
+/** Longitud objetivo de cada párrafo, en caracteres. */
+const PARAGRAPH_TARGET = 700;
+
+/**
+ * Divide un texto plano en párrafos, cortando por frases.
+ *
+ * Si el texto no trae puntuación (pasa con subtítulos automáticos), cortar por
+ * frases daría un único párrafo enorme: en ese caso se agrupa por palabras.
+ */
+export function splitIntoParagraphs(text: string, target = PARAGRAPH_TARGET): string[] {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  if (!clean) {
+    return [];
+  }
+
+  const sentences = clean.match(/[^.!?…]+[.!?…]+["'»)]*\s*/g) ?? [];
+  if (sentences.length < 3) {
+    return chunkByWords(clean, target);
+  }
+
+  const paragraphs: string[] = [];
+  let current = '';
+
+  for (const sentence of sentences) {
+    if (current && current.length + sentence.length > target) {
+      paragraphs.push(current.trim());
+      current = '';
+    }
+    current += sentence;
+  }
+
+  const tail = current.trim();
+  if (tail) {
+    paragraphs.push(tail);
+  }
+  return paragraphs;
+}
+
+function chunkByWords(text: string, target: number): string[] {
+  const words = text.split(' ');
+  const chunks: string[] = [];
+  let current: string[] = [];
+  let length = 0;
+
+  for (const word of words) {
+    if (current.length && length + word.length + 1 > target) {
+      chunks.push(current.join(' '));
+      current = [];
+      length = 0;
+    }
+    current.push(word);
+    length += word.length + 1;
+  }
+
+  if (current.length) {
+    chunks.push(current.join(' '));
+  }
+  return chunks;
 }

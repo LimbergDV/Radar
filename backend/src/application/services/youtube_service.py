@@ -10,7 +10,8 @@ from src.core.use_cases.sync_youtube import YouTubeApiError
 from src.core.use_cases.update_source_config import YouTubeConfigError
 from src.infrastructure.database.repositories.youtube_pg_repo import YouTubeRepository
 from src.infrastructure.database.settings import settings
-from src.infrastructure.external.youtube_api import sync_pipeline
+from src.infrastructure.external import rapidapi_transcript
+from src.infrastructure.external.youtube_api import resolve_transcript, sync_pipeline
 
 logger = get_logger(__name__)
 
@@ -75,6 +76,66 @@ class YouTubeService:
         language: str | None = None,
     ) -> list[YouTubeVideo]:
         return await self.repo.get_videos(limit, offset, language)
+
+    async def backfill_transcripts(self, limit: int = 20) -> dict:
+        """Rellena transcripciones de videos que quedaron sin texto.
+
+        Va bajo demanda (endpoint y tool del MCP) en vez de en cada sync: la
+        cuota del fallback es de ~100 peticiones al mes, y gastarla de golpe
+        dejaría al sync diario sin plan B justo cuando YouTube le bloquee la IP.
+
+        Se procesan del más nuevo al más antiguo porque son los que el usuario
+        ve primero en el feed.
+        """
+        limit = max(1, min(limit, 50))
+        config = await self.repo.get_config()
+        languages = config.languages or ["es", "en"]
+
+        videos = await self.repo.list_videos_missing_transcript(limit)
+        filled = 0
+        sources: dict[str, int] = {}
+        failures: dict[str, int] = {}
+
+        for video in videos:
+            text, error, source = await resolve_transcript(
+                video.id, languages, video.language
+            )
+            if error is None:
+                await self.repo.update_transcript(video.id, text)
+                filled += 1
+                sources[source] = sources.get(source, 0) + 1
+            else:
+                failures[error] = failures.get(error, 0) + 1
+
+        logger.info(
+            "Backfill de transcripciones: %d/%d rellenadas (%s)",
+            filled,
+            len(videos),
+            ", ".join(f"{k}: {v}" for k, v in sorted(sources.items())) or "ninguna",
+        )
+
+        return {
+            "status": "success",
+            "source": "youtube",
+            "candidates": len(videos),
+            "filled": filled,
+            "failed": len(videos) - filled,
+            "sources": sources,
+            "failures": failures,
+            "quota": rapidapi_transcript.budget_status(),
+        }
+
+    async def transcript_status(self) -> dict:
+        """Cobertura de transcripciones y cuota del fallback."""
+        total = await self.repo.count_videos()
+        missing = await self.repo.count_missing_transcripts()
+        return {
+            "total_videos": total,
+            "with_transcript": total - missing,
+            "missing_transcript": missing,
+            "coverage_percent": round((total - missing) / total * 100, 1) if total else 0.0,
+            "fallback": rapidapi_transcript.budget_status(),
+        }
 
     async def get_video(self, video_id: str) -> YouTubeVideo | None:
         return await self.repo.get_video_by_id(video_id)

@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -129,6 +129,38 @@ class YouTubeRepository(YouTubeRepositoryBase):
             stmt = stmt.where(YouTubeVideoModel.language.ilike(f"{language}%"))
         result = await self.session.execute(stmt)
         return result.scalar_one()
+
+    def _missing_transcript_filter(self):
+        """Placeholder o vacío: las dos formas en que queda un video sin texto."""
+        return YouTubeVideoModel.transcript.in_(["", NO_TRANSCRIPT])
+
+    async def list_videos_missing_transcript(self, limit: int = 20) -> list[YouTubeVideo]:
+        stmt = (
+            select(YouTubeVideoModel)
+            .where(self._missing_transcript_filter())
+            .order_by(YouTubeVideoModel.published_at.desc())
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return [_to_entity(m) for m in result.scalars().all()]
+
+    async def count_missing_transcripts(self) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(YouTubeVideoModel)
+            .where(self._missing_transcript_filter())
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one()
+
+    async def update_transcript(self, video_id: str, transcript: str) -> bool:
+        result = await self.session.execute(
+            update(YouTubeVideoModel)
+            .where(YouTubeVideoModel.id == video_id)
+            .values(transcript=transcript)
+        )
+        await self.session.commit()
+        return result.rowcount > 0
 
     async def latest_video_date(self) -> datetime | None:
         result = await self.session.execute(select(func.max(YouTubeVideoModel.published_at)))

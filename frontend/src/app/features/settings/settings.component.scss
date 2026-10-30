@@ -125,3 +125,44 @@ select {
     background: var(--color-blueprint-blue-dark);
   }
 }
+
+.btn--ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  background: transparent;
+  border-color: var(--color-fog);
+  color: var(--color-ink-black);
+
+  &:hover:not(:disabled) {
+    background: var(--color-paper);
+    border-color: var(--color-slate);
+  }
+}
+
+/* Panel aparte del formulario: el relleno de transcripciones no es config. */
+.transcripts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  align-items: flex-start;
+  max-width: 720px;
+  padding: var(--space-20);
+  margin-top: var(--space-28);
+  border: 1px solid var(--color-fog);
+  border-radius: var(--radius-card);
+  background: var(--color-paper);
+}
+
+.transcripts__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-12);
+  width: 100%;
+}
+
+.transcripts__hint {
+  max-width: 62ch;
+  line-height: 1.5;
+}

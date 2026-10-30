@@ -5,6 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.dtos.youtube_dto import (
     SyncResponse,
+    TranscriptBackfillResponse,
+    TranscriptStatusResponse,
     YouTubeConfigResponse,
     YouTubeConfigUpdate,
     YouTubeVideoDetail,
@@ -45,6 +47,30 @@ async def sync_youtube_videos(db: AsyncSession = Depends(get_db)):
         return await YouTubeService(db).sync_videos()
     except YouTubeServiceError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.get("/transcripts/status", response_model=TranscriptStatusResponse)
+async def get_transcript_status(db: AsyncSession = Depends(get_db)):
+    """Cobertura de transcripciones y cuota que queda del fallback de pago."""
+    return await YouTubeService(db).transcript_status()
+
+
+@router.post("/transcripts/backfill", response_model=TranscriptBackfillResponse)
+async def backfill_transcripts(
+    limit: int = Query(
+        20,
+        ge=1,
+        le=50,
+        description="Cuántos videos sin transcripción procesar en esta pasada",
+    ),
+    db: AsyncSession = Depends(get_db),
+):
+    """Rellena transcripciones de videos antiguos, del más nuevo al más viejo.
+
+    Es manual a propósito: cada video que la vía gratuita no resuelve consume
+    cuota del plan de RapidAPI (~100 peticiones al mes).
+    """
+    return await YouTubeService(db).backfill_transcripts(limit)
 
 
 @router.get("/config", response_model=YouTubeConfigResponse)

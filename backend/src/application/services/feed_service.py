@@ -24,6 +24,17 @@ logger = get_logger(__name__)
 
 VALID_SOURCES = ("youtube", "news", "github", "papers")
 
+# Texto de relleno que el pipeline guarda cuando no pudo obtener la
+# transcripción. No es contenido y no debe llegar al feed como si lo fuera.
+NO_TRANSCRIPT = "Transcripción no disponible"
+
+
+def _has_transcript(text: str | None) -> bool:
+    """True solo si hay texto real (ni vacío ni el placeholder)."""
+    cleaned = (text or "").strip()
+    return bool(cleaned) and cleaned != NO_TRANSCRIPT
+
+
 
 class FeedService:
     def __init__(self, session: AsyncSession):
@@ -79,7 +90,9 @@ class FeedService:
                 title=video.title,
                 url=video.url,
                 published_at=video.published_at,
-                description=video.transcript[:280] if video.transcript else "",
+                # El placeholder no es contenido: usarlo como extracto pintaba
+                # "Transcripción no disponible" como si fuera el resumen.
+                description=video.transcript[:280] if _has_transcript(video.transcript) else "",
                 image_url=video.thumbnail_url or None,
                 author=video.channel,
                 language=video.language,
@@ -89,7 +102,10 @@ class FeedService:
                     "comments": video.comments,
                     "duration_seconds": video.duration_seconds,
                 },
-                extra={"channel_id": video.channel_id, "has_transcript": bool(video.transcript)},
+                extra={
+                    "channel_id": video.channel_id,
+                    "has_transcript": _has_transcript(video.transcript),
+                },
             )
             for video in videos
             if _matches_query(video.title, query)

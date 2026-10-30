@@ -336,6 +336,82 @@ class TestGetVideo:
             await tools.get_video("")
 
 
+class TestGetTranscript:
+    """Tool dedicada: ventana por rangos o búsqueda dentro del texto."""
+
+    TEXT = ("Hoy hablamos de inteligencia artificial y de sus limites. " * 30) + (
+        "El futuro del machine learning depende de los datos."
+    )
+
+    def tools_with(self, transcript=None, **settings_kwargs):
+        text = self.TEXT if transcript is None else transcript
+
+        async def handler(request):
+            return json_response({"id": "v1", "title": "T", "channel": "C", "transcript": text})
+
+        return make_tools(handler, **settings_kwargs)
+
+    @pytest.mark.asyncio
+    async def test_returns_a_window_by_default(self):
+        tools = self.tools_with(max_content_chars=100)
+        result = await tools.get_transcript("v1")
+
+        block = result["transcript"]
+        assert block["chars_returned"] == 100
+        assert block["total_chars"] == len(self.TEXT)
+        assert block["truncated"] is True
+        assert block["next_offset"] == 100
+        assert block["content_id"] == "transcript:v1"
+        # El detalle del video viene aparte y sin duplicar el texto.
+        assert result["video"]["id"] == "v1"
+        assert "transcript" not in result["video"]
+
+    @pytest.mark.asyncio
+    async def test_offset_continues_where_it_stopped(self):
+        tools = self.tools_with(max_content_chars=50)
+        first = await tools.get_transcript("v1", offset=0, limit=50)
+        second = await tools.get_transcript("v1", offset=first["transcript"]["next_offset"], limit=50)
+
+        assert first["transcript"]["text"] == self.TEXT[:50]
+        assert second["transcript"]["text"] == self.TEXT[50:100]
+        assert second["transcript"]["offset"] == 50
+
+    @pytest.mark.asyncio
+    async def test_query_returns_matches_with_context(self):
+        tools = self.tools_with()
+        result = await tools.get_transcript("v1", query="machine learning")
+
+        assert result["match_count"] == 1
+        match = result["matches"][0]
+        assert match["offset"] == self.TEXT.index("machine learning")
+        assert "machine learning" in match["snippet"]
+        assert match["truncated_before"] is True
+        assert result["total_chars"] == len(self.TEXT)
+
+    @pytest.mark.asyncio
+    async def test_query_without_matches_explains_itself(self):
+        tools = self.tools_with()
+        result = await tools.get_transcript("v1", query="blockchain")
+
+        assert result["match_count"] == 0
+        assert "no aparece" in result["hint"]
+
+    @pytest.mark.asyncio
+    async def test_placeholder_is_not_content(self):
+        """'Transcripción no disponible' tiene 27 chars: no es una transcripción."""
+        tools = self.tools_with(transcript="Transcripción no disponible")
+        result = await tools.get_transcript("v1")
+
+        assert result["transcript"]["available"] is False
+        assert "no tiene transcripción" in result["transcript"]["hint"]
+
+    @pytest.mark.asyncio
+    async def test_requires_video_id(self):
+        tools = make_tools(lambda r: json_response({}))
+        with pytest.raises(RadarError, match="Falta video_id"):
+            await tools.get_transcript("")
+
+
 class TestGetRepo:
     @pytest.mark.asyncio
     async def test_numeric_id_is_used_directly(self):
@@ -393,6 +469,98 @@ class TestGetRepo:
         tools = make_tools(handler)
         with pytest.raises(RadarError, match="radar_search"):
             await tools.get_repo("no/existe")
+
+
+class TestGetReadme:
+    """README de un repo: ventana por rangos o búsqueda dentro del texto.
+
+    Gemela de `TestGetTranscript`: los READMEs tienen el mismo problema (texto
+    largo de terceros) y por eso el contrato es el mismo.
+    """
+
+    TEXT = ("## Installation\n\nRun this to install the package.\n\n" * 40) + (
+        "## Contributing\n\nRead CONTRIBUTING.md before opening a pull request."
+    )
+
+    def tools_with(self, readme=None, **settings_kwargs):
+        text = self.TEXT if readme is None else readme
+
+        async def handler(request):
+            if request.url.path == "/api/feed":
+                return json_response(FEED)
+            return json_response(
+                {"full_name": "facebook/react", "stargazers_count": 10, "readme": text}
+            )
+
+        return make_tools(handler, **settings_kwargs)
+
+    @pytest.mark.asyncio
+    async def test_returns_a_window_by_default(self):
+        tools = self.tools_with(max_content_chars=100)
+        result = await tools.get_readme("123")
+
+        block = result["readme"]
+        assert block["chars_returned"] == 100
+        assert block["total_chars"] == len(self.TEXT)
+        assert block["next_offset"] == 100
+        assert block["content_id"] == "readme:facebook/react"
+        # Los metadatos del repo van aparte, sin el texto dentro.
+        assert result["repo"]["full_name"] == "facebook/react"
+        assert "readme" not in result["repo"]
+
+    @pytest.mark.asyncio
+    async def test_offset_continues_where_it_stopped(self):
+        tools = self.tools_with(max_content_chars=50)
+        first = await tools.get_readme("123", limit=50)
+        second = await tools.get_readme("123", offset=first["readme"]["next_offset"], limit=50)
+
+        assert first["readme"]["text"] == self.TEXT[:50]
+        assert second["readme"]["text"] == self.TEXT[50:100]
+
+    @pytest.mark.asyncio
+    async def test_query_returns_matches_with_context(self):
+        tools = self.tools_with()
+        result = await tools.get_readme("123", query="CONTRIBUTING.md")
+
+        assert result["match_count"] == 1
+        match = result["matches"][0]
+        assert match["offset"] == self.TEXT.index("CONTRIBUTING.md")
+        assert "CONTRIBUTING.md" in match["snippet"]
+        assert result["total_chars"] == len(self.TEXT)
+        assert result["untrusted"] is True
+
+    @pytest.mark.asyncio
+    async def test_query_without_matches_explains_itself(self):
+        tools = self.tools_with()
+        result = await tools.get_readme("123", query="kubernetes")
+
+        assert result["match_count"] == 0
+        assert "no aparece" in result["hint"]
+
+    @pytest.mark.asyncio
+    async def test_repo_without_readme_says_so(self):
+        async def handler(request):
+            return json_response({"full_name": "a/b", "readme": ""})
+
+        tools = make_tools(handler)
+        result = await tools.get_readme("7")
+
+        assert result["readme"]["available"] is False
+        assert "no tiene README" in result["readme"]["hint"]
+
+    @pytest.mark.asyncio
+    async def test_name_is_resolved_like_get_repo(self):
+        tools = self.tools_with()
+        result = await tools.get_readme("facebook/react")
+
+        assert result["resolved_from"] == "facebook/react"
+        assert result["readme"]["content_id"] == "readme:facebook/react"
+
+    @pytest.mark.asyncio
+    async def test_requires_repo(self):
+        tools = make_tools(lambda r: json_response({}))
+        with pytest.raises(RadarError, match="Falta repo"):
+            await tools.get_readme("  ")
 
 
 class TestGetPaper:
@@ -551,8 +719,10 @@ class TestServerSurface:
             "radar_stats",
             "radar_search",
             "radar_get_video",
+            "radar_get_transcript",
             "radar_get_article",
             "radar_get_repo",
+            "radar_get_readme",
             "radar_get_paper",
             "radar_get_context",
             "radar_sync",
