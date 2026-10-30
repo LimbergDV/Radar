@@ -217,6 +217,15 @@ def readme_content_id(repo: str) -> str:
     return f"readme:{repo}"
 
 
+def repo_fields(detail: dict) -> dict:
+    """El repo sin su README: el texto y los metadatos viajan separados.
+
+    Un README de 30k chars mezclado con estrellas y topics en el mismo objeto
+    obliga a quien lo lea a descartar manualmente lo que no es texto.
+    """
+    return {k: v for k, v in detail.items() if k != "readme"}
+
+
 def paper_content_id(paper_id: str) -> str:
     return f"paper:{paper_id}"
 
@@ -447,6 +456,96 @@ class RadarTools:
 
     async def get_repo(self, repo: str, content: str = "summary") -> dict:
         """Detalle de un repo. `repo` acepta id numérico o `owner/nombre`."""
+        detail, _, content_id, resolved_from = await self._load_readme(repo)
+
+        result: dict = {
+            "repo": repo_fields(detail),
+            "readme": content_block(
+                detail.get("readme"),
+                content_id=content_id,
+                mode=content,
+                budget=self.settings.max_content_chars,
+                missing_hint="Este repo no tiene README.",
+            ),
+        }
+        if resolved_from:
+            result["resolved_from"] = resolved_from
+        return result
+
+    async def get_readme(
+        self,
+        repo: str,
+        query: str | None = None,
+        offset: int = 0,
+        limit: int | None = None,
+    ) -> dict:
+        """README completo, o las apariciones de `query` dentro de él.
+
+        Existe aparte de `radar_get_repo` por la misma razón que
+        `radar_get_transcript` existe aparte de `radar_get_video`: un README de
+        proyecto serio pasa de 15.000 caracteres, y leerlo entero por rangos
+        para encontrar "cómo se instala" gasta la ventana del agente. Con
+        `query` devuelve cada aparición con su contexto y su offset exacto.
+        """
+        detail, text, content_id, resolved_from = await self._load_readme(repo)
+
+        result: dict = {"repo": repo_fields(detail)}
+        if resolved_from:
+            result["resolved_from"] = resolved_from
+
+        if not text:
+            result["readme"] = content_block(
+                None,
+                content_id=content_id,
+                mode="full",
+                budget=self.settings.max_content_chars,
+                missing_hint=(
+                    "Este repo no tiene README en la base. No es un fallo de "
+                    "la herramienta: Radar guarda el README que devolvió "
+                    "GitHub, y algunos repos no traen ninguno."
+                ),
+            )
+            return result
+
+        if query:
+            found = find_matches(text, query)
+            result.update(
+                {
+                    "content_id": content_id,
+                    "untrusted": True,
+                    "note": UNTRUSTED_NOTE,
+                    "query": query,
+                    "match_count": len(found),
+                    "total_chars": len(text),
+                    "matches": found,
+                    "hint": (
+                        None
+                        if found
+                        else "Ese término no aparece en el README. Prueba otra "
+                        "palabra o lee por rangos con offset/limit."
+                    ),
+                }
+            )
+            return result
+
+        result["readme"] = clip(
+            text,
+            content_id=content_id,
+            budget=limit if limit and limit > 0 else self.settings.max_content_chars,
+            offset=offset,
+        )
+        return result
+
+    async def _load_readme(self, repo: str) -> tuple[dict, str | None, str, str | None]:
+        """Resuelve el repo y devuelve (detalle, texto, content_id, resuelto_desde).
+
+        Los tres call sites (get_repo, get_readme, get_context) necesitan lo
+        mismo, y resolver un `owner/nombre` cuesta una petición al feed: tenerlo
+        en un solo sitio evita que se desincronicen y que se repita la llamada.
+
+        El texto sale normalizado a `None` cuando no hay contenido real, para
+        que quien lo consuma no tenga que recordar que "" no es un README.
+        """
         repo = (repo or "").strip()
         if not repo:
             raise RadarError("Falta repo: id numérico o 'owner/nombre'.")
@@ -456,20 +555,9 @@ class RadarTools:
             repo, resolved_from = await self._resolve_repo(repo)
 
         detail = await self.client.get_json(f"/api/github/repos/{repo}")
-
-        result: dict = {
-            "repo": {k: v for k, v in detail.items() if k != "readme"},
-            "readme": content_block(
-                detail.get("readme"),
-                content_id=readme_content_id(detail.get("full_name") or repo),
-                mode=content,
-                budget=self.settings.max_content_chars,
-                missing_hint="Este repo no tiene README.",
-            ),
-        }
-        if resolved_from:
-            result["resolved_from"] = resolved_from
-        return result
+        raw = detail.get("readme")
+        text = raw if has_content(raw) else None
+        return detail, text, readme_content_id(detail.get("full_name") or repo), resolved_from
 
     async def get_paper(self, paper_id: str, content: str = "summary") -> dict:
         """Detalle de un paper con abstract y AI summary.
@@ -547,9 +635,7 @@ class RadarTools:
             payload = await self.client.get_json(f"/api/news/articles/{ref}")
             text = payload.get("content")
         elif kind == "readme":
-            repo = ref if ref.isdigit() else (await self._resolve_repo(ref))[0]
-            payload = await self.client.get_json(f"/api/github/repos/{repo}")
-            text = payload.get("readme")
+            _, text, _, _ = await self._load_readme(ref)
         elif kind in ("paper", "paper_ai"):
             payload = await self.client.get_json(f"/api/papers/{ref}")
             text = payload.get("abstract" if kind == "paper" else "ai_summary")

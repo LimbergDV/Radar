@@ -73,8 +73,8 @@
       <span class="u-meta">{{ r.default_branch }} · {{ r.size_kb }} KB</span>
     </div>
 
-    @if (readmeOf(r); as readme) {
-      <pre class="readme__body"><code [innerHTML]="readme"></code></pre>
+    @if (readmeHtml(); as readme) {
+      <div class="readme__body markdown" [innerHTML]="readme"></div>
     } @else {
       <p class="u-meta">Este repositorio no tiene README.</p>
     }

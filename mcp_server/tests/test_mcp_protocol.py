@@ -17,6 +17,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from radar_mcp.server import build_server  # noqa: E402
+from radar_mcp.tools import VALID_SOURCES  # noqa: E402
 
 pytestmark = [
     pytest.mark.live,
@@ -44,14 +45,20 @@ def server():
 
 class TestHandshake:
     @pytest.mark.asyncio
-    async def test_lists_eight_tools(self, server):
+    async def test_lists_every_tool(self, server):
+        """El conteo exacto envejece mal: se comprueba el conjunto, no el número."""
         tools = await server.list_tools()
-        assert len(tools) == 8
-        assert {t.name for t in tools} >= {
+        assert {t.name for t in tools} == {
             "radar_stats",
             "radar_search",
+            "radar_get_video",
+            "radar_get_transcript",
+            "radar_get_article",
             "radar_get_repo",
+            "radar_get_readme",
             "radar_get_paper",
+            "radar_get_context",
+            "radar_sync",
         }
 
     @pytest.mark.asyncio
@@ -158,7 +165,9 @@ async def test_schema_resource_is_readable(server):
 @pytest.mark.asyncio
 async def test_config_resource_is_valid_json(server):
     config = json.loads(resource_text(await server.read_resource("radar://config")))
-    assert set(config) == {"youtube", "news", "github"}
+    # Se compara contra VALID_SOURCES y no contra una lista escrita a mano:
+    # la anterior se quedó sin "papers" al añadir esa fuente.
+    assert set(config) == set(VALID_SOURCES)
     assert isinstance(config["youtube"]["keywords"], list)
 
 

@@ -1,0 +1,162 @@
+// Tipografía para HTML generado en runtime (READMEs de GitHub).
+//
+// Vive en la hoja global y no en el `.scss` del componente por una razón
+// concreta: Angular añade `_ngcontent-*` a los selectores de un componente y el
+// HTML que entra por `[innerHTML]` no lleva ese atributo, así que
+// `.markdown h1` dentro del componente nunca aplicaría.
+//
+// Los estilos inline del README no llegan aquí: el saneador los quita.
+
+.markdown {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    margin: var(--space-28) 0 var(--space-12);
+    font-weight: var(--weight-semibold);
+    line-height: 1.3;
+    color: var(--color-ink-black);
+    letter-spacing: var(--tracking-tight);
+  }
+
+  h1 {
+    font-size: var(--text-heading-sm);
+    padding-bottom: var(--space-8);
+    border-bottom: 1px solid var(--color-fog);
+  }
+
+  h2 {
+    font-size: var(--text-subheading);
+    padding-bottom: var(--space-8);
+    border-bottom: 1px solid var(--color-fog);
+  }
+
+  h3 {
+    font-size: var(--text-body);
+  }
+
+  h4,
+  h5,
+  h6 {
+    font-size: var(--text-body-sm);
+  }
+
+  // El primer bloque no debe empujar el contenido hacia abajo.
+  > :first-child {
+    margin-top: 0;
+  }
+
+  p {
+    margin: var(--space-12) 0;
+  }
+
+  a {
+    color: var(--color-blueprint-blue);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+
+    &:hover {
+      color: var(--color-blueprint-blue-dark);
+    }
+  }
+
+  ul,
+  ol {
+    margin: var(--space-12) 0;
+    padding-left: var(--space-28);
+  }
+
+  li {
+    margin: var(--space-4) 0;
+  }
+
+  li::marker {
+    color: var(--color-slate);
+  }
+
+  // Los README alinean banners con <p align="center">.
+  [align='center'] {
+    text-align: center;
+  }
+
+  img {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--radius-control);
+  }
+
+  code {
+    padding: 2px 5px;
+    background: var(--color-stone);
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: var(--text-caption);
+  }
+
+  pre {
+    padding: var(--space-12) var(--space-16);
+    margin: var(--space-16) 0;
+    background: var(--color-paper);
+    border: 1px solid var(--color-fog);
+    border-radius: var(--radius-control);
+    overflow-x: auto;
+
+    code {
+      padding: 0;
+      background: none;
+      font-size: var(--text-caption);
+      line-height: 1.6;
+    }
+  }
+
+  blockquote {
+    margin: var(--space-16) 0;
+    padding: var(--space-4) var(--space-16);
+    border-left: 3px solid var(--color-fog);
+    color: var(--color-slate);
+  }
+
+  table {
+    width: 100%;
+    margin: var(--space-16) 0;
+    border-collapse: collapse;
+    font-size: var(--text-caption);
+  }
+
+  th,
+  td {
+    padding: var(--space-8) var(--space-12);
+    border: 1px solid var(--color-fog);
+    text-align: left;
+  }
+
+  th {
+    background: var(--color-paper);
+    font-weight: var(--weight-semibold);
+  }
+
+  hr {
+    margin: var(--space-20) 0;
+    border: 0;
+    border-top: 1px solid var(--color-fog);
+  }
+
+  details {
+    margin: var(--space-12) 0;
+    padding: var(--space-8) var(--space-12);
+    border: 1px solid var(--color-fog);
+    border-radius: var(--radius-control);
+  }
+
+  summary {
+    cursor: pointer;
+    font-weight: var(--weight-medium);
+  }
+
+  // Casillas de las listas de tareas (`- [x]`).
+  input[type='checkbox'] {
+    margin-right: var(--space-8);
+  }
+}

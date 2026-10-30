@@ -99,6 +99,7 @@ pip install -e mcp_server      # o: pip install -r mcp_server/requirements.txt
 radar-cli stats                                       # qué hay y cuándo se sincronizó
 radar-cli search --source news --limit 5              # buscar
 radar-cli repo NousResearch/hermes-agent              # detalle por nombre
+radar-cli readme NousResearch/hermes-agent --query install  # buscar dentro del README
 radar-cli article <id> --full                         # leer una noticia entera
 radar-cli video <id> --full                           # leer una transcripción
 radar-cli paper 2610.36082 --full                     # abstract + AI summary
@@ -119,6 +120,7 @@ Probado contra la app desplegada: `radar-cli stats` devuelve 665 items y
 | `radar_get_transcript` | Transcripción por rangos o **buscando una frase dentro** |
 | `radar_get_article` | Noticia + cuerpo del artículo |
 | `radar_get_repo` | Repo + README. Acepta id o `owner/nombre` |
+| `radar_get_readme` | README por rangos o **buscando una frase dentro** |
 | `radar_get_paper` | Paper HF + abstract + AI summary. Acepta id de arXiv (`2610.36082`) |
 | `radar_get_context` | Lee un contenido largo **por rangos**, con su `content_id` |
 | `radar_sync` | Desactivada (ver abajo) |
@@ -136,6 +138,21 @@ alrededor. Sin `query` funciona como `radar_get_context`, por rangos.
 radar_get_transcript("abc123", query="embeddings")   # apariciones + contexto
 radar_get_transcript("abc123", offset=0, limit=4000)  # primera ventana
 ```
+
+### Por qué existe `radar_get_readme` además de `radar_get_repo`
+
+Mismo problema que las transcripciones, con otros números: un README pesa entre
+17.000 y 34.000 caracteres. Para responder "¿cómo se instala?" no sirve traerlo
+entero. `radar_get_readme` acepta `query` y devuelve cada aparición con su
+`offset` exacto y el contexto de alrededor.
+
+```python
+radar_get_readme("langgenius/dify", query="self-hosted")  # apariciones
+radar_get_readme("langgenius/dify", offset=0, limit=4000)  # primera ventana
+```
+
+`radar_get_repo` sigue existiendo para los metadatos (estrellas, lenguaje,
+topics, licencia) sin arrastrar el texto.
 
 ### Por qué existe `radar_get_context`
 

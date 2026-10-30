@@ -90,6 +90,33 @@ class TestContentIsReadable:
         assert detail["readme"]["untrusted"] is True
 
     @pytest.mark.asyncio
+    async def test_readme_can_be_searched_without_reading_it_all(self, live_tools):
+        """El caso real: 20k chars y quiero saber cómo se instala."""
+        found = await live_tools.search(source="github", limit=1)
+        full_name = found["items"][0]["title"]
+
+        result = await live_tools.get_readme(full_name, query="install")
+        assert result["total_chars"] > 1_000
+        assert result["untrusted"] is True
+        # Puede no aparecer "install" en ese README concreto; lo que no puede
+        # pasar es que la herramienta se rompa o devuelva el texto entero.
+        assert "matches" in result
+        assert all("offset" in m and "snippet" in m for m in result["matches"])
+
+    @pytest.mark.asyncio
+    async def test_readme_window_advances_with_offset(self, live_tools):
+        found = await live_tools.search(source="github", limit=1)
+        full_name = found["items"][0]["title"]
+
+        first = await live_tools.get_readme(full_name, limit=300)
+        second = await live_tools.get_readme(
+            full_name, offset=first["readme"]["next_offset"], limit=300
+        )
+
+        assert first["readme"]["chars_returned"] == 300
+        assert second["readme"]["text"] != first["readme"]["text"]
+
+    @pytest.mark.asyncio
     async def test_a_news_article_has_body_text(self, live_tools):
         """Es lo que arreglamos: noticias que se pueden leer.
 

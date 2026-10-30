@@ -146,14 +146,14 @@
 .readme__body {
   max-height: 620px;
   overflow: auto;
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-word;
+  font-size: var(--text-body-sm);
+  line-height: 1.65;
   color: var(--color-carbon);
+  word-break: break-word;
 }
+
+// La tipografía del markdown vive en src/styles/_markdown.scss: Angular no
+// aplica estilos encapsulados al HTML inyectado con [innerHTML].
 
 .panel {
   padding: var(--space-48);

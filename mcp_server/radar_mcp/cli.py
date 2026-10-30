@@ -7,6 +7,7 @@ Sirve para dos cosas:
     python -m radar_mcp.cli stats
     python -m radar_mcp.cli search --source news --limit 5
     python -m radar_mcp.cli repo NousResearch/hermes-agent --full
+    python -m radar_mcp.cli readme NousResearch/hermes-agent --query install
     python -m radar_mcp.cli article <id> --full
     python -m radar_mcp.cli paper 2610.36082 --full
     python -m radar_mcp.cli context readme:NousResearch/hermes-agent --limit 800
@@ -130,6 +131,31 @@ async def cmd_repo(args) -> int:
     return 0
 
 
+async def cmd_readme(args) -> int:
+    """README completo por rangos, o las apariciones de una búsqueda."""
+    payload = await _tools().get_readme(
+        args.repo, query=args.query, offset=args.offset, limit=args.limit
+    )
+    print(f"\n{payload['repo']['full_name']} — {payload['repo'].get('description') or ''}")
+
+    if args.query:
+        print(
+            f"\n  {payload['match_count']} apariciones de {args.query!r} "
+            f"en {payload['total_chars']} chars"
+        )
+        for match in payload["matches"]:
+            print(f"\n  @{match['offset']}")
+            print("  " + match["snippet"].replace("\n", "\n  "))
+        if not payload["matches"]:
+            print(f"  {payload['hint']}")
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0
+
+    print_content_block(payload["readme"], max_chars=args.full and MAX_PRINT_CHARS or 800)
+    return 0
+
+
 async def cmd_paper(args) -> int:
     payload = await _tools().get_paper(args.id, content="full" if args.full else "summary")
     print(f"\n{payload['paper']['title']}")
@@ -185,6 +211,13 @@ def build_parser() -> argparse.ArgumentParser:
     repo.add_argument("repo")
     repo.add_argument("--full", action="store_true")
 
+    readme = sub.add_parser("readme", help="README de un repo, entero o buscando dentro")
+    readme.add_argument("repo", help="id o owner/nombre")
+    readme.add_argument("-q", "--query", help="Busca esta frase dentro del README")
+    readme.add_argument("--offset", type=int, default=0)
+    readme.add_argument("-n", "--limit", type=int)
+    readme.add_argument("--full", action="store_true")
+
     paper = sub.add_parser("paper", help="Detalle de un paper de Hugging Face")
     paper.add_argument("id", help="Id de arXiv, p. ej. 2610.36082")
     paper.add_argument("--full", action="store_true")
@@ -208,6 +241,7 @@ async def main_async(args) -> int:
         "video": cmd_video,
         "article": cmd_article,
         "repo": cmd_repo,
+        "readme": cmd_readme,
         "paper": cmd_paper,
         "context": cmd_context,
     }
