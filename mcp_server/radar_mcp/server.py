@@ -241,6 +241,40 @@ class _AsgiBridge:
         await self.app(scope, receive, send)
 
 
+def allow_public_host(server: FastMCP) -> None:
+    """Admite el dominio público en el chequeo de `Host`.
+
+    A partir de mcp 1.10, `FastMCP` activa la protección DNS-rebinding por
+    defecto y solo deja pasar `127.0.0.1`/`localhost`. Detrás de Railway el
+    `Host` es el dominio público, así que sin esto la app responde 421
+    ("Invalid Host header") a cualquier cliente MCP.
+
+    Los dominios válidos salen de `RAILWAY_PUBLIC_DOMAIN` (lo inyecta Railway)
+    y de `RADAR_ALLOWED_HOSTS` (lista separada por comas, para otros proxies).
+    """
+    try:
+        from mcp.server.transport_security import TransportSecuritySettings
+    except ImportError:  # mcp < 1.10: no hay chequeo que configurar
+        return
+
+    extra = [h.strip() for h in os.getenv("RADAR_ALLOWED_HOSTS", "").split(",") if h.strip()]
+    public_domain = os.getenv("RAILWAY_PUBLIC_DOMAIN", "").strip()
+    if public_domain:
+        extra.append(public_domain)
+
+    allowed_hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
+    allowed_origins = ["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"]
+    for host in extra:
+        allowed_hosts += [host, f"{host}:*"]
+        allowed_origins += [f"https://{host}", f"http://{host}"]
+
+    server.settings.transport_security = TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=allowed_hosts,
+        allowed_origins=allowed_origins,
+    )
+
+
 def http_app(server: FastMCP):
     """App Starlette con `/mcp` respondiendo en la ruta exacta, sin redirect."""
     from starlette.routing import Mount, Route
@@ -286,6 +320,7 @@ def main() -> None:
         parser.error("--http sin puerto y sin $PORT definido")
     server.settings.port = int(port)
     server.settings.host = "0.0.0.0"
+    allow_public_host(server)
 
     import uvicorn
 
