@@ -7,6 +7,7 @@ import type {
   GitHubConfig,
   GoogleNewsConfig,
   PaperConfig,
+  TranscriptStatus,
   YouTubeConfig,
 } from '../../core/models';
 import { ToastService } from '../../core/notifications/toast.service';
@@ -42,6 +43,10 @@ export class SettingsComponent {
   protected readonly github = signal<GitHubConfig | null>(null);
   protected readonly papers = signal<PaperConfig | null>(null);
 
+  /** Cobertura de transcripciones: informativa, no bloquea la página. */
+  protected readonly transcripts = signal<TranscriptStatus | null>(null);
+  protected readonly backfilling = signal(false);
+
   /** Campos de texto que en la API son arrays; aquí se editan separados por coma. */
   protected readonly ytKeywords = signal('');
   protected readonly ytChannels = signal('');
@@ -53,10 +58,48 @@ export class SettingsComponent {
 
   constructor() {
     this.loadAll();
+    this.loadTranscriptStatus();
   }
 
   protected setTab(tab: Tab): void {
     this.tab.set(tab);
+  }
+
+  private loadTranscriptStatus(): void {
+    // Si el endpoint falla, la sección simplemente no se pinta: es información
+    // de apoyo y no debe romper la página de configuración.
+    this.api.getTranscriptStatus().subscribe({
+      next: (status) => this.transcripts.set(status),
+      error: () => this.transcripts.set(null),
+    });
+  }
+
+  /** Rellena transcripciones ya guardadas. Manual: gasta cuota del fallback. */
+  protected backfillTranscripts(): void {
+    if (this.backfilling()) {
+      return;
+    }
+    this.backfilling.set(true);
+
+    this.api.backfillTranscripts(20).subscribe({
+      next: (result) => {
+        this.toasts.success(
+          `Transcripciones: ${result.filled} de ${result.candidates} rellenadas.`,
+        );
+        const failures = Object.entries(result.failures);
+        if (failures.length) {
+          this.toasts.info(
+            failures.map(([reason, count]) => `${reason} ×${count}`).join(', '),
+          );
+        }
+        this.loadTranscriptStatus();
+        this.backfilling.set(false);
+      },
+      error: () => {
+        // El interceptor ya notificó el error.
+        this.backfilling.set(false);
+      },
+    });
   }
 
   private loadAll(): void {

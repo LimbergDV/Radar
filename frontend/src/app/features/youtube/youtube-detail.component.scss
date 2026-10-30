@@ -109,7 +109,12 @@
   font-size: var(--text-body-sm);
   line-height: 1.63;
   color: var(--color-carbon);
-  white-space: pre-wrap;
+}
+
+/* El texto llega como un bloque único; el componente lo parte en párrafos y el
+   espaciado es lo que marca la separación visual entre ellos. */
+.transcript__paragraph + .transcript__paragraph {
+  margin-top: var(--space-12);
 }
 
 .transcript__none {

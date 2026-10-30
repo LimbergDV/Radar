@@ -37,6 +37,22 @@ class YouTubeRepository(ABC):
         """Total de videos almacenados (para /api/feed/stats)."""
 
     @abstractmethod
+    async def list_videos_missing_transcript(self, limit: int = 20) -> list[YouTubeVideo]:
+        """Videos sin transcripción real, del más nuevo al más antiguo.
+
+        El orden importa: la cuota de RapidAPI es escasa, así que se rellena
+        primero lo que el usuario ve en el feed.
+        """
+
+    @abstractmethod
+    async def count_missing_transcripts(self) -> int:
+        """Cuántos videos siguen sin transcripción."""
+
+    @abstractmethod
+    async def update_transcript(self, video_id: str, transcript: str) -> bool:
+        """Guarda la transcripción de un video. True si el video existía."""
+
+    @abstractmethod
     async def latest_video_date(self) -> datetime | None:
         """Fecha de publicacion del video mas reciente almacenado."""
 

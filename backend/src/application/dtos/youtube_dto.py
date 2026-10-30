@@ -57,3 +57,39 @@ class SyncResponse(BaseModel):
     items_synced: int
     duration_seconds: float | None = None
     message: str | None = None
+
+
+class TranscriptFallbackStatus(BaseModel):
+    """Cuota del proveedor de transcripciones de pago (RapidAPI)."""
+
+    enabled: bool
+    used_by_app: int
+    app_budget: int
+    # None cuando en este proceso aún no se ha llamado al proveedor y por tanto
+    # no se conoce su contador real.
+    remaining: int | None = None
+    provider_limit: int | None = None
+    month: str
+
+
+class TranscriptStatusResponse(BaseModel):
+    """Cobertura de transcripciones del feed y cuota disponible."""
+
+    total_videos: int
+    with_transcript: int
+    missing_transcript: int
+    coverage_percent: float
+    fallback: TranscriptFallbackStatus
+
+
+class TranscriptBackfillResponse(BaseModel):
+    """Resultado de rellenar transcripciones bajo demanda."""
+
+    status: str
+    source: str
+    candidates: int
+    filled: int
+    failed: int
+    sources: dict[str, int] = Field(default_factory=dict)
+    failures: dict[str, int] = Field(default_factory=dict)
+    quota: TranscriptFallbackStatus

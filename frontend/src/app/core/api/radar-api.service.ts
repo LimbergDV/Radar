@@ -18,6 +18,8 @@ import type {
   PaperSummary,
   SourceId,
   SyncResult,
+  TranscriptBackfillResult,
+  TranscriptStatus,
   YouTubeConfig,
   YouTubeVideoDetail,
   YouTubeVideoSummary,
@@ -84,6 +86,17 @@ export class RadarApiService {
 
   syncYouTube(): Observable<SyncResult> {
     return this.http.post<SyncResult>(`${this.base}/youtube/sync`, null);
+  }
+
+  getTranscriptStatus(): Observable<TranscriptStatus> {
+    return this.http.get<TranscriptStatus>(`${this.base}/youtube/transcripts/status`);
+  }
+
+  /** Rellena transcripciones ya guardadas. Manual: gasta cuota del fallback. */
+  backfillTranscripts(limit = 20): Observable<TranscriptBackfillResult> {
+    return this.http.post<TranscriptBackfillResult>(`${this.base}/youtube/transcripts/backfill`, null, {
+      params: { limit },
+    });
   }
 
   getYouTubeConfig(): Observable<YouTubeConfig> {

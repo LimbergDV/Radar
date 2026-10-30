@@ -51,6 +51,25 @@ def is_short(duration_seconds: int, minimum: int = MIN_DURATION_SECONDS) -> bool
     return duration_seconds <= minimum
 
 
+def pick_transcript_language(preferred: str | None, languages: list[str]) -> str | None:
+    """Idioma con el que pedir la transcripción al fallback de pago.
+
+    Sin `lang`, el proveedor devuelve la primera pista que encuentra: un video
+    en español acabó llegando en árabe. Se prioriza el idioma que declara el
+    video para que la transcripción coincida con el audio, pero solo si está
+    entre los configurados; si no, el primero de la configuración.
+
+    `None` significa "no mandes `lang`": sin idiomas configurados no hay nada
+    mejor que preguntar.
+    """
+    allowed = [normalize_language(lang) for lang in (languages or []) if lang and lang.strip()]
+    declared = normalize_language(preferred or "")
+
+    if declared and (not allowed or declared in allowed):
+        return declared
+    return allowed[0] if allowed else None
+
+
 def matches_language(snippet: dict, languages: list[str]) -> bool:
     """El video debe estar en alguno de los idiomas configurados.
 

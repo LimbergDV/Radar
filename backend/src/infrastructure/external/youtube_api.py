@@ -16,6 +16,7 @@ from src.core.logging_config import get_logger
 from src.core.use_cases import sync_youtube as uc
 from src.core.use_cases.sync_youtube import YouTubeApiError
 from src.core.use_cases.update_source_config import ensure_youtube_searchable
+from src.infrastructure.external import rapidapi_transcript
 
 logger = get_logger(__name__)
 
@@ -24,6 +25,10 @@ REQUEST_TIMEOUT = 30.0
 SEARCH_MAX_RESULTS = 50
 ENRICH_BATCH_SIZE = 50
 NO_TRANSCRIPT = "Transcripción no disponible"
+# De dónde salió el texto, para el log del pipeline y para poder auditar cuánta
+# cuota de RapidAPI se está gastando.
+FREE_TRANSCRIPT_SOURCE = "youtube-transcript-api"
+RAPIDAPI_TRANSCRIPT_SOURCE = "rapidapi"
 # search.list cuesta 100 unidades contra la cuota diaria de 10.000; videos.list,
 # 1. Se loguea porque el numero de peticiones depende de la config del usuario.
 SEARCH_UNIT_COST = 100
@@ -278,52 +283,74 @@ class YouTubeFetcher:
         languages = config.languages or ["es", "en"]
         synced_at = datetime.now(timezone.utc)
 
-        async def process(item: dict) -> tuple[YouTubeVideo | None, str | None]:
+        async def process(item: dict) -> tuple[YouTubeVideo | None, str | None, str]:
             video_id = item["id"]
-            transcript, error = await asyncio.to_thread(fetch_transcript, video_id, languages)
-            return uc.build_video(item, transcript, synced_at), error
+            snippet = item.get("snippet") or {}
+            declared = snippet.get("defaultAudioLanguage") or snippet.get("defaultLanguage")
+            transcript, error, source = await resolve_transcript(video_id, languages, declared)
+            return uc.build_video(item, transcript, synced_at), error, source
 
         results = await asyncio.gather(*(process(item) for item in selected))
 
-        videos = [video for video, _error in results if video is not None]
-        self._log_transcript_summary([error for _video, error in results])
+        videos = [video for video, _error, _source in results if video is not None]
+        self._log_transcript_summary(
+            [(error, source) for _video, error, source in results]
+        )
 
         return videos
 
     @staticmethod
-    def _log_transcript_summary(errors: list[str | None]) -> None:
-        """Reporta cuantas transcripciones se obtuvieron y por que fallaron.
+    def _log_transcript_summary(results: list[tuple[str | None, str]]) -> None:
+        """Reporta cuántas transcripciones se obtuvieron, de dónde y qué falló.
 
-        Sin esto el fallo se tragaba en silencio y parecia que los videos no
-        tienen transcripcion, cuando lo habitual es que YouTube este limitando
-        la IP (IpBlocked).
+        Sin esto el fallo se tragaba en silencio y parecía que los videos no
+        tienen transcripción, cuando lo habitual es que YouTube esté limitando
+        la IP (IpBlocked) y quien salve el video sea el fallback de RapidAPI.
         """
-        total = len(errors)
+        total = len(results)
         if not total:
             return
 
-        obtained = sum(1 for error in errors if error is None)
+        obtained = sum(1 for error, _source in results if error is None)
         if obtained == total:
-            logger.info("Transcripciones: %d/%d obtenidas", obtained, total)
+            logger.info(
+                "Transcripciones: %d/%d obtenidas (%s)",
+                obtained,
+                total,
+                _describe_sources(results),
+            )
             return
 
         counts: dict[str, int] = {}
-        for error in errors:
+        for error, _source in results:
             if error:
                 counts[error] = counts.get(error, 0) + 1
 
         detalle = ", ".join(f"{reason} x{n}" for reason, n in sorted(counts.items()))
         logger.warning(
-            "Transcripciones: solo %d/%d obtenidas (%s). Si aparece IpBlocked, "
-            "YouTube esta limitando esta IP; se reintentan en la proxima sincronizacion.",
+            "Transcripciones: solo %d/%d obtenidas (%s). Fallos: %s. Si aparece "
+            "IpBlocked, YouTube esta limitando esta IP; si ademas el fallback "
+            "dice cuota_agotada, hay que esperar al proximo mes o subir el plan.",
             obtained,
             total,
+            _describe_sources(results),
             detalle,
         )
 
 
+def _describe_sources(results: list[tuple[str | None, str]]) -> str:
+    """Cuenta cuántas vinieron de la vía gratuita y cuántas del fallback."""
+    counts: dict[str, int] = {}
+    for error, source in results:
+        if error is None and source:
+            counts[source] = counts.get(source, 0) + 1
+    if not counts:
+        return "ninguna fuente"
+    return ", ".join(f"{source}: {n}" for source, n in sorted(counts.items()))
+
+
 def fetch_transcript(video_id: str, languages: list[str]) -> tuple[str, str | None]:
-    """Devuelve (texto, error); el texto es el placeholder si no se pudo obtener.
+    """Devuelve (texto, error) usando `youtube-transcript-api`. Sin coste.
 
     OJO: en `youtube-transcript-api` 1.x el metodo de clase `get_transcript` ya
     no existe y la API es instancia + `.fetch(...)`. Antes se llamaba al viejo y
@@ -341,6 +368,39 @@ def fetch_transcript(video_id: str, languages: list[str]) -> tuple[str, str | No
         return (text, None) if text else (NO_TRANSCRIPT, "vacia")
     except Exception as exc:  # noqa: BLE001 - sin transcripcion no es un fallo del sync
         return NO_TRANSCRIPT, type(exc).__name__
+
+
+async def resolve_transcript(
+    video_id: str,
+    languages: list[str],
+    preferred_lang: str | None = None,
+) -> tuple[str, str | None, str]:
+    """Obtiene la transcripción: gratis primero, RapidAPI solo si falla.
+
+    Devuelve `(texto, error, fuente)`. El orden importa porque la cuota del plan
+    free son ~100 peticiones al mes: gastarlas en videos que la vía gratuita ya
+    resolvía dejaría sin fallback a los que de verdad lo necesitan.
+
+    La llamada gratuita va en un hilo porque `youtube-transcript-api` es
+    síncrona y bloquea el event loop.
+    """
+    text, error = await asyncio.to_thread(fetch_transcript, video_id, languages)
+    if text != NO_TRANSCRIPT:
+        return text, None, FREE_TRANSCRIPT_SOURCE
+
+    paid_text, paid_error = await rapidapi_transcript.fetch_transcript(
+        video_id,
+        lang=uc.pick_transcript_language(preferred_lang, languages),
+    )
+    if paid_text:
+        return paid_text, None, RAPIDAPI_TRANSCRIPT_SOURCE
+
+    # El motivo útil es el de la vía gratuita cuando el fallback ni siquiera
+    # llegó a ejecutarse (sin key o sin cuota): ahí `paid_error` lo dice.
+    motivo = error or "desconocido"
+    if paid_error not in (None, "sin_transcripcion"):
+        motivo = f"{motivo}/{paid_error}"
+    return NO_TRANSCRIPT, motivo, ""
 
 
 async def sync_pipeline(config: YouTubeConfig, api_key: str) -> list[YouTubeVideo]:

@@ -55,16 +55,24 @@
     <div class="transcript__head">
       <h2>Transcripción</h2>
       @if (hasTranscript(v.transcript)) {
-        <span class="u-meta">{{ wordCount(v.transcript) }} palabras</span>
+        <span class="u-meta">
+          {{ wordCount(v.transcript) | compactNumber }} palabras · {{ readingMinutes(v.transcript) }}
+          min de lectura
+        </span>
       }
     </div>
 
-    @if (hasTranscript(v.transcript)) {
-      <p class="transcript__body">{{ v.transcript }}</p>
+    @if (transcriptParagraphs().length) {
+      <div class="transcript__body">
+        @for (paragraph of transcriptParagraphs(); track $index) {
+          <p class="transcript__paragraph">{{ paragraph }}</p>
+        }
+      </div>
     } @else {
       <p class="u-meta transcript__none">
-        Este video no tiene transcripción disponible. YouTube la habilita a veces después de la
-        publicación; se reintenta en la próxima sincronización.
+        Este video no tiene transcripción disponible. Algunos videos (directos, música o sin
+        subtítulos subidos) no la tienen; en el resto YouTube la habilita a veces después de la
+        publicación y se reintenta en la próxima sincronización.
       </p>
     }
   </section>

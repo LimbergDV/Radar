@@ -26,6 +26,17 @@ class Settings(BaseSettings):
     # Sin token el rate limit de GitHub es 60 req/h; con token, 5000.
     github_token: str = ""
 
+    # Fallback de transcripciones para cuando YouTube bloquea la IP del
+    # datacenter (lo habitual en Railway). Sin key, el sync sigue funcionando
+    # solo con `youtube-transcript-api`.
+    rapidapi_key: str = ""
+    rapidapi_host: str = "youtube-transcript3.p.rapidapi.com"
+    rapidapi_timeout: float = 30.0
+    # El plan free del proveedor son ~100 peticiones al mes. El tope se deja
+    # configurable para reservar margen (por ejemplo, si se comparte la key) y
+    # bajarlo a 0 apaga el fallback sin tocar código.
+    rapidapi_transcript_budget: int = 100
+
     app_env: str = "development"
     app_port: int = 8000
     # NoDecode: acepta tanto JSON (["https://a","https://b"]) como una lista

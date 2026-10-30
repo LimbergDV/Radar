@@ -23,6 +23,38 @@ export interface YouTubeVideoDetail extends YouTubeVideoSummary {
   transcript: string;
 }
 
+/** Cuota del fallback de transcripciones (RapidAPI). */
+export interface TranscriptFallbackStatus {
+  enabled: boolean;
+  used_by_app: number;
+  app_budget: number;
+  /** null cuando aún no se ha llamado al proveedor en este proceso. */
+  remaining: number | null;
+  provider_limit: number | null;
+  month: string;
+}
+
+/** Cobertura de transcripciones del feed y cuota disponible. */
+export interface TranscriptStatus {
+  total_videos: number;
+  with_transcript: number;
+  missing_transcript: number;
+  coverage_percent: number;
+  fallback: TranscriptFallbackStatus;
+}
+
+/** Resultado de una pasada de relleno de transcripciones. */
+export interface TranscriptBackfillResult {
+  status: string;
+  source: string;
+  candidates: number;
+  filled: number;
+  failed: number;
+  sources: Record<string, number>;
+  failures: Record<string, number>;
+  quota: TranscriptFallbackStatus;
+}
+
 export interface GoogleNewsArticleSummary {
   id: string;
   title: string;
