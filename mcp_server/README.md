@@ -44,8 +44,32 @@ Para Claude Desktop, lo mismo en `claude_desktop_config.json`. Para Cursor, en
 
 ## Conectarlo con Antigravity
 
-Antigravity soporta MCP (soporte añadido a principios de 2026). Se configura en
-`mcp_config.json`:
+Hay dos formas. La recomendada es **remota**: el MCP ya está desplegado, así que
+no hace falta el venv ni el repo en la máquina.
+
+### Opción A: servidor remoto (recomendada)
+
+Fichero `~/.gemini/config/mcp_config.json` (global) o
+`<workspace>/.agents/mcp_config.json` (por proyecto):
+
+```json
+{
+  "mcpServers": {
+    "radar": {
+      "serverUrl": "https://radar-mcp-production-440cb271.up.railway.app/mcp",
+      "timeoutSeconds": 120
+    }
+  }
+}
+```
+
+Sin barra final: `/mcp/` responde 307 y el cliente puede quedarse en el redirect.
+No lleva `headers` porque el servidor es público y de solo lectura.
+
+### Opción B: stdio local
+
+Si prefieres ejecutarlo en tu máquina (sin red, o contra otra API con
+`RADAR_API_URL`):
 
 ```json
 {
@@ -60,19 +84,19 @@ Antigravity soporta MCP (soporte añadido a principios de 2026). Se configura en
 }
 ```
 
-Dos detalles propios de Antigravity:
+Tres detalles propios de Antigravity:
 
-- **Usa la ruta absoluta al interprete.** No te fies del `python` del PATH: si el
-  IDE se lanza desde la app, puede no ser el mismo venv.
-- **Los permisos vienen en modo "Ask"**: cada herramienta pide aprobacion antes
-  de ejecutarse. Puedes concederlas por servidor en su politica de permisos.
+- **La clave es `serverUrl`, no `url`** (aunque acepta ambas) y no se mezcla con
+  `command`: o remoto o local, no los dos.
+- **Los permisos vienen en modo "Ask"**: cada herramienta pide aprobación. Para
+  dejar Radar en automático, permite el servidor en la política de permisos con
+  `mcp(radar/*)`.
+- **En la opción B, usa la ruta absoluta al intérprete.** Si el IDE se lanza
+  desde la app, el `python` del PATH puede no ser el venv del proyecto.
 
-Desde la interfaz: ventana del agente -> menu de tres puntos -> **MCP Servers ->
-Manage MCP Servers -> View raw config**, y ahi pegas el bloque de arriba.
+Desde la interfaz: **Settings (Cmd + ,) → Customizations → Installed MCP
+Servers**. Ahí puedes ver si conectó, los 10 tools y el toggle para apagarlo.
 
-> El cliente MCP de Antigravity es mas nuevo que el de Claude Desktop o Cursor, asi
-> que puede tener alguna rareza en casos limite. Si una herramienta falla, prueba
-> primero con `radar-cli`, que va directo a la API.
 
 ## Preguntas para probar el agente
 
