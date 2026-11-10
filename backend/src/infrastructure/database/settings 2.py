@@ -1,0 +1,131 @@
+from typing import Annotated, Self
+
+from pydantic import field_validator, model_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+# Dialecto que espera `create_async_engine`. Cualquier URL de Postgres tiene que
+# apuntar aqui o el arranque falla con NoSuchModuleError.
+_ASYNC_PG_DRIVER = "postgresql+asyncpg"
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        case_sensitive=False,
+    )
+
+    # Sin default a proposito: se valida en `_explain_missing_database_url` para
+    # poder dar un mensaje que diga COMO arreglarlo. Con `database_url: str`
+    # (obligatorio), pydantic soltaba un frio "Field required" sin contexto.
+    database_url: str = ""
+    sql_echo: bool = False
+
+    youtube_api_key: str = ""
+    # Sin token el rate limit de GitHub es 60 req/h; con token, 5000.
+    github_token: str = ""
+
+    # Fallback de transcripciones para cuando YouTube bloquea la IP del
+    # datacenter (lo habitual en Railway). Sin key, el sync sigue funcionando
+    # solo con `youtube-transcript-api`.
+    rapidapi_key: str = ""
+    rapidapi_host: str = "youtube-transcript3.p.rapidapi.com"
+    rapidapi_timeout: float = 30.0
+    # El plan free del proveedor son ~100 peticiones al mes. El tope se deja
+    # configurable para reservar margen (por ejemplo, si se comparte la key) y
+    # bajarlo a 0 apaga el fallback sin tocar código.
+    rapidapi_transcript_budget: int = 100
+
+    app_env: str = "development"
+    app_port: int = 8000
+    # NoDecode: acepta tanto JSON (["https://a","https://b"]) como una lista
+    # separada por comas. Sin esto, un CORS_ORIGINS="a,b" en Railway revienta
+    # al arrancar porque pydantic-settings solo probaria a parsear JSON.
+    cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:4200"]
+
+    sync_interval_minutes: int = 60
+    log_level: str = "INFO"
+
+    @model_validator(mode="after")
+    def _explain_missing_database_url(self) -> Self:
+        """Convierte 'Field required' en instrucciones para arreglarlo.
+
+        Este es el error mas comun al desplegar: la variable no se creo en el
+        servicio y pydantic no puede saber si fue un descuido o un nombre mal
+        puesto. Ademas, sin esto el fallo aparece en el import de settings, asi
+        que ni Alembic ni uvicorn llegan a arrancar.
+        """
+        if self.database_url.strip():
+            return self
+
+        raise ValueError(
+            "Falta la variable de entorno DATABASE_URL. "
+            "En local: ponla en backend/.env. "
+            "En Railway: abre el servicio del backend -> pestana Variables -> "
+            "'+ New Variable' -> tipo 'Reference' -> elige tu servicio de "
+            "PostgreSQL -> elige DATABASE_URL. Si prefieres pegarla a mano, "
+            "copia la URL de la pestana Variables del propio Postgres; se "
+            "acepta en formato postgres:// o postgresql://."
+        )
+
+    @field_validator("database_url")
+    @classmethod
+    def _force_asyncpg_driver(cls, value: str) -> str:
+        """Fuerza el driver asyncpq en la URL de la base de datos.
+
+        Railway entrega `postgres://user:pass@host:5432/db`, y un Postgres de
+        cualquier proveedor suele venir como `postgresql://...`. Ninguno de los
+        dos funciona con `create_async_engine`: el primero no es un dialecto
+        conocido y el segundo intenta cargar el driver sincrono `psycopg`, que
+        no esta instalado. Se normaliza a `postgresql+asyncpg://` una sola vez,
+        aqui, para que el resto del codigo no tenga que celibrar el formato.
+        """
+        if not value:
+            return value
+
+        url = value.strip()
+        # Vacio (o solo espacios) se deja como esta para que lo atrape el
+        # validador del modelo y explique como arreglarlo. Si se siguiera, un
+        # "   " se convertiria en "postgresql+asyncpg://" y pareceria valido.
+        if not url:
+            return url
+
+        scheme, sep, rest = url.partition("://")
+        if not sep:
+            # URL sin esquema explicito: se asume Postgres.
+            return f"{_ASYNC_PG_DRIVER}://{url}"
+
+        if scheme in ("postgres", "postgresql", "postgresql+psycopg2", "postgres+psycopg2"):
+            return f"{_ASYNC_PG_DRIVER}://{rest}"
+        if scheme == "postgres+asyncpg":
+            return f"{_ASYNC_PG_DRIVER}://{rest}"
+        if scheme == _ASYNC_PG_DRIVER:
+            return url
+
+        # Otro driver (mysql, sqlite, ...): se deja como esta para que el error
+        # lo diga SQLAlchemy y no una conversion silenciosa.
+        return url
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _split_cors_origins(cls, value):
+        """Acepta JSON o lista separada por comas/espacios."""
+        if isinstance(value, str):
+            raw = value.strip()
+            if not raw:
+                return []
+            if raw.startswith("["):
+                import json
+
+                try:
+                    return json.loads(raw)
+                except json.JSONDecodeError:
+                    # JSON roto: mejor una lista utilizable que un crash.
+                    raw = raw.strip("[]")
+            return [part.strip().strip("\"'") for part in raw.split(",") if part.strip()]
+        return value
+
+
+# Instancia global — se importa desde cualquier lado
+settings = Settings()

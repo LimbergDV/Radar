@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.angular/
+*.tsbuildinfo
+.git/
+.gitignore
+.vscode/
+.idea/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+Dockerfile
+.dockerignore
+
+# NO ignorar nginx.conf.template: el Dockerfile lo copia a /etc/nginx/.
+# Estaba en esta lista y rompia el build entero ("not found"), que es peor
+# que no tener optimizacion.
