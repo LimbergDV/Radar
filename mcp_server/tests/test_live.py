@@ -34,7 +34,7 @@ pytestmark = [
 @pytest.fixture
 def live_tools():
     settings = Settings(
-        api_url=os.getenv("RADAR_API_URL", "https://frontend-production-820b7.up.railway.app"),
+        api_url=os.getenv("RADAR_API_URL", "https://frontend-production-d2347cba.up.railway.app"),
         timeout=45,
     )
     return RadarTools(client=RadarClient(settings), settings=settings)

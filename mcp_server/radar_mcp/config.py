@@ -9,7 +9,7 @@ import os
 from dataclasses import dataclass
 
 # La app desplegada. El MCP habla SIEMPRE por aquí, nunca contra localhost.
-DEFAULT_API_URL = "https://frontend-production-820b7.up.railway.app"
+DEFAULT_API_URL = "https://frontend-production-d2347cba.up.railway.app"
 
 
 def _env_int(name: str, default: int) -> int:
