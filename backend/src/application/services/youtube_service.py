@@ -20,6 +20,15 @@ class YouTubeServiceError(Exception):
     """Fallo recuperable durante la sincronizacion (se traduce a HTTP 502)."""
 
 
+class YouTubeSetupError(YouTubeServiceError):
+    """La configuracion no permite sincronizar (sin keywords ni canales).
+
+    Es un error de setup, no del gateway, asi que el router lo devuelve como
+    4xx: con 502 nginx lo confundia con un backend caido y sustituia el
+    mensaje accionable por su pagina de error.
+    """
+
+
 class YouTubeService:
     def __init__(self, session: AsyncSession):
         self.repo = YouTubeRepository(session)
@@ -40,7 +49,7 @@ class YouTubeService:
             # Config sin objetivos de busqueda. No es un fallo de la API de
             # YouTube sino de setup, y el usuario tiene que poder leerlo.
             logger.warning("Sincronizacion de YouTube cancelada: %s", exc)
-            raise YouTubeServiceError(str(exc)) from exc
+            raise YouTubeSetupError(str(exc)) from exc
         except YouTubeApiError as exc:
             # Cuota/credenciales/red. Sin esto el sync devolveria 'exitoso' con 0
             # videos y pareceria que no hay contenido nuevo.

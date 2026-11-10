@@ -78,6 +78,13 @@ export class SyncButtonComponent {
   readonly variant = input<'solid' | 'ghost'>('solid');
   readonly label = input<string>('Sincronizar');
 
+  /**
+   * Se ejecuta antes del sync y, si rechaza, no se sincroniza.
+   * Lo usan los formularios de configuración para que "Guardar y sincronizar"
+   * guarde de verdad en vez de sincronizar con los valores viejos.
+   */
+  readonly before = input<(() => Promise<unknown>) | null>(null);
+
   protected readonly running = signal(false);
 
   /** Llamado tras cada sync para que el padre recargue su lista. */
@@ -101,6 +108,11 @@ export class SyncButtonComponent {
       : ['youtube', 'news', 'github', 'papers'];
 
     try {
+      const prepare = this.before();
+      if (prepare) {
+        await prepare();
+      }
+
       const results: SyncResult[] = [];
 
       // En serie y no en paralelo: las APIs externas tienen rate limit y un

@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { LucideAngularModule } from 'lucide-angular';
+import { firstValueFrom } from 'rxjs';
 
 import { RadarApiService } from '../../core/api/radar-api.service';
 import type {
@@ -136,6 +137,13 @@ export class SettingsComponent {
   }
 
   protected saveYouTube(): void {
+    void this.saveYouTubeConfig().catch(() => {
+      // El interceptor ya mostró el error; aquí sólo evitamos el unhandled.
+    });
+  }
+
+  /** Guarda y resuelve cuando el backend confirmó. Lo usa "Guardar y sincronizar". */
+  protected async saveYouTubeConfig(): Promise<void> {
     const current = this.youtube();
     if (!current) {
       return;
@@ -148,16 +156,15 @@ export class SettingsComponent {
       channel_ids: this.splitList(this.ytChannels()),
     };
 
-    this.api.updateYouTubeConfig(payload).subscribe({
-      next: (saved) => {
-        this.youtube.set(saved);
-        this.ytKeywords.set(saved.keywords.join(', '));
-        this.ytChannels.set(saved.channel_ids.join(', '));
-        this.saving.set(null);
-        this.toasts.success('Configuración de YouTube guardada. Pulsa Sincronizar para aplicarla.');
-      },
-      error: () => this.saving.set(null),
-    });
+    try {
+      const saved = await firstValueFrom(this.api.updateYouTubeConfig(payload));
+      this.youtube.set(saved);
+      this.ytKeywords.set(saved.keywords.join(', '));
+      this.ytChannels.set(saved.channel_ids.join(', '));
+      this.toasts.success('Configuración de YouTube guardada.');
+    } finally {
+      this.saving.set(null);
+    }
   }
 
   protected saveNews(): void {
@@ -239,6 +246,9 @@ export class SettingsComponent {
   protected setYouTube(patch: Partial<YouTubeConfig>): void {
     this.youtube.update((config) => (config ? { ...config, ...patch } : config));
   }
+
+  /** Versión enlazada para el botón "Guardar y sincronizar". */
+  protected readonly saveYouTubeBeforeSync = (): Promise<void> => this.saveYouTubeConfig();
 
   protected setNews(patch: Partial<GoogleNewsConfig>): void {
     this.news.update((config) => (config ? { ...config, ...patch } : config));

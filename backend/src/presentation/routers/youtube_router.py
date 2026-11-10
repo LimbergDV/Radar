@@ -12,7 +12,11 @@ from src.application.dtos.youtube_dto import (
     YouTubeVideoDetail,
     YouTubeVideoSummary,
 )
-from src.application.services.youtube_service import YouTubeService, YouTubeServiceError
+from src.application.services.youtube_service import (
+    YouTubeService,
+    YouTubeServiceError,
+    YouTubeSetupError,
+)
 from src.presentation.dependencies import get_db
 
 router = APIRouter()
@@ -45,6 +49,10 @@ async def sync_youtube_videos(db: AsyncSession = Depends(get_db)):
     """Dispara la sincronizacion manual (lo usa el boton de la web)."""
     try:
         return await YouTubeService(db).sync_videos()
+    except YouTubeSetupError as exc:
+        # 409: el servidor esta bien; lo que falta es configurar keywords o
+        # canales. Un 502 aqui lo capturaba nginx y ocultaba el mensaje.
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except YouTubeServiceError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 

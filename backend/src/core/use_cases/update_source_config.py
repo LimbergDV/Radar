@@ -23,8 +23,8 @@ class YouTubeConfigError(ValueError):
     """La configuracion de YouTube no permite sincronizar nada.
 
     Hereda de ValueError porque para el resto de la app "config invalida" ya
-    significa eso; el service la traduce a YouTubeServiceError (HTTP 502) para
-    que la UI muestre un toast util en vez de un fallo generico.
+    significa eso; el service la traduce a YouTubeSetupError (HTTP 409) para
+    que la UI muestre el mensaje accionable en vez de un fallo generico.
     """
 
 
