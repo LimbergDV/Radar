@@ -46,7 +46,10 @@ server {
         proxy_read_timeout 180s;
         proxy_send_timeout 180s;
 
-        proxy_intercept_errors on;
+        # off: los 5xx del backend pasan tal cual (con su `detail` JSON) para
+        # que la app pueda mostrar el motivo real. El error_page de abajo sigue
+        # aplicando a los 502 que genera nginx cuando el upstream no responde.
+        proxy_intercept_errors off;
         error_page 502 504 = @api_upstream_down;
     }
 
@@ -66,7 +69,10 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_connect_timeout 5s;
         proxy_read_timeout 30s;
-        proxy_intercept_errors on;
+        # off: los 5xx del backend pasan tal cual (con su `detail` JSON) para
+        # que la app pueda mostrar el motivo real. El error_page de abajo sigue
+        # aplicando a los 502 que genera nginx cuando el upstream no responde.
+        proxy_intercept_errors off;
         error_page 502 504 = @api_upstream_down;
     }
 
