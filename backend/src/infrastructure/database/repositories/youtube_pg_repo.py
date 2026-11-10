@@ -121,6 +121,11 @@ class YouTubeRepository(YouTubeRepositoryBase):
         await self.session.commit()
         return result.rowcount or 0
 
+    async def delete_all_videos(self) -> int:
+        result = await self.session.execute(delete(YouTubeVideoModel))
+        await self.session.commit()
+        return result.rowcount or 0
+
     async def get_videos(
         self,
         limit: int = 20,

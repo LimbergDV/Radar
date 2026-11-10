@@ -172,6 +172,17 @@ class YouTubeService:
     async def update_config(self, config):
         return await self.repo.update_config(config)
 
+    async def clear_videos(self) -> int:
+        """Vacia el feed de YouTube.
+
+        Se llama cuando cambian keywords/canales/idiomas: lo guardado responde a
+        una busqueda que ya no es la del usuario, y dejarlo mezclado con lo nuevo
+        es peor que un feed vacio hasta la proxima sincronizacion.
+        """
+        removed = await self.repo.delete_all_videos()
+        logger.info("YouTube: feed vaciado (%d videos) por cambio de criterios", removed)
+        return removed
+
 
 def _now():
     from datetime import datetime, timezone

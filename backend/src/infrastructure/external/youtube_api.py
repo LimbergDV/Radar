@@ -66,7 +66,10 @@ def _describe_api_error(response) -> str:
 def _quota_hint(detail: str) -> str:
     """El consejo depende de la causa: tocar la cuota no arregla una key mala."""
     if "cuota" in detail:
-        return " Sube SYNC_INTERVAL_MINUTES o quita keywords para gastar menos."
+        return (
+            " La cuota se reinicia a medianoche (hora del Pacifico de EE.UU.)."
+            " Sube SYNC_INTERVAL_MINUTES o quita keywords para gastar menos."
+        )
     if "API key" in detail:
         return " Revisa YOUTUBE_API_KEY en el .env."
     return ""
