@@ -37,6 +37,10 @@ class YouTubeRepository(ABC):
         """
 
     @abstractmethod
+    async def delete_all_videos(self) -> int:
+        """Vacia el feed de YouTube (se usa al cambiar los criterios de busqueda)."""
+
+    @abstractmethod
     async def get_videos(
         self,
         limit: int = 20,

@@ -449,3 +449,11 @@ async def test_service_does_not_prune_after_partial_search(monkeypatch):
     await service.sync_videos()
 
     assert deleted == []
+
+
+def test_normalize_compara_por_contenido_y_no_por_orden():
+    """Guardar la misma config en otro orden no debe vaciar el feed."""
+    from src.presentation.routers.youtube_router import _normalize
+
+    assert _normalize(["Recetas", "cocina", " recetas "]) == ["cocina", "recetas"]
+    assert _normalize([]) == []

@@ -96,6 +96,15 @@ async def update_youtube_config(
     service = YouTubeService(db)
     current = await service.get_config()
 
+    # Los criterios de busqueda definen QUE hay en el feed. Si cambian, lo
+    # guardado ya no responde a lo que pide el usuario: se vacia para que no se
+    # mezcle con los resultados nuevos.
+    search_changed = (
+        _normalize(current.keywords) != _normalize(payload.keywords)
+        or _normalize(current.channel_ids) != _normalize(payload.channel_ids)
+        or _normalize(current.languages) != _normalize(payload.languages)
+    )
+
     current.keywords = payload.keywords
     current.channel_ids = payload.channel_ids
     current.languages = payload.languages
@@ -103,4 +112,12 @@ async def update_youtube_config(
     current.days_back = payload.days_back
 
     saved = await service.update_config(current)
+    if search_changed:
+        await service.clear_videos()
+
     return YouTubeConfigResponse(**vars(saved))
+
+
+def _normalize(values: list[str]) -> list[str]:
+    """Compara sin importar orden, mayusculas ni espacios."""
+    return sorted({(value or "").strip().lower() for value in values if (value or "").strip()})
