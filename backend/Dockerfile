@@ -31,7 +31,9 @@ EXPOSE 8000
 # --proxy-headers hace que uvicorn confíe en X-Forwarded-* y req.url.app sea el
 # dominio publico, no el host interno.
 #
-# --host :: hace que uvicorn escuche en todas las interfaces IPv4 e IPv6 (y en
-# $PORT). La red privada de Railway resuelve los servicios a direcciones IPv6,
-# asi que con 0.0.0.0 (solo IPv4) las conexiones desde otros servicios caducan.
-CMD ["sh", "-c", "alembic upgrade head && exec uvicorn main:app --host :: --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips='*'"]
+# --host 0.0.0.0: la red privada de Railway ya es dual-stack (IPv4 + IPv6), pero
+# el healthcheck y el proxy del edge llegan por IPv4. Con `--host ::` uvicorn
+# solo abria el socket IPv6 en este runtime y el deploy moria con
+# "Healthcheck failed ... service unavailable" aunque la app estuviera viva.
+# 0.0.0.0 cubre IPv4 y, en entornos dual-stack, tambien el trafico interno.
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips='*'"]
