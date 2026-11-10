@@ -6,6 +6,7 @@ hay red.
 """
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -29,6 +30,8 @@ NO_TRANSCRIPT = "Transcripción no disponible"
 # cuota de RapidAPI se está gastando.
 FREE_TRANSCRIPT_SOURCE = "youtube-transcript-api"
 RAPIDAPI_TRANSCRIPT_SOURCE = "rapidapi"
+# La transcripcion ya estaba en la base de datos y no se volvio a pedir.
+STORED_TRANSCRIPT_SOURCE = "guardada"
 # search.list cuesta 100 unidades contra la cuota diaria de 10.000; videos.list,
 # 1. Se loguea porque el numero de peticiones depende de la config del usuario.
 SEARCH_UNIT_COST = 100
@@ -75,6 +78,9 @@ class YouTubeFetcher:
             raise ValueError("Falta configurar YOUTUBE_API_KEY en el archivo .env")
         self.api_key = api_key
         self.base_url = "https://youtube.googleapis.com/youtube/v3"
+        # Lo pone `_fetch_search_candidates`: False si alguna busqueda fallo. El
+        # service lo usa para no podar el feed con un resultado parcial.
+        self.last_run_complete = True
 
     def _client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(
@@ -224,6 +230,7 @@ class YouTubeFetcher:
             )
 
         items.sort(key=lambda x: (x.get("snippet") or {}).get("publishedAt", ""), reverse=True)
+        self.last_run_complete = not failures
         logger.info("YouTube: %d candidatos unicos", len(items))
         return items
 
@@ -265,6 +272,7 @@ class YouTubeFetcher:
         self,
         videos: list[dict],
         config: YouTubeConfig,
+        known_transcripts: dict[str, str] | None = None,
     ) -> list[YouTubeVideo]:
         """Aplica filtros y obtiene la transcripcion de cada video."""
         candidates = [item for item in videos if uc.passes_filters(item, config)]
@@ -282,10 +290,18 @@ class YouTubeFetcher:
 
         languages = config.languages or ["es", "en"]
         synced_at = datetime.now(timezone.utc)
+        known = known_transcripts or {}
 
         async def process(item: dict) -> tuple[YouTubeVideo | None, str | None, str]:
             video_id = item["id"]
             snippet = item.get("snippet") or {}
+
+            # Ya la tenemos guardada: no se vuelve a pedir. Sin esto cada sync
+            # pagaba RapidAPI otra vez por los mismos videos.
+            stored = (known.get(video_id) or "").strip()
+            if stored and stored != NO_TRANSCRIPT:
+                return uc.build_video(item, stored, synced_at), None, STORED_TRANSCRIPT_SOURCE
+
             declared = snippet.get("defaultAudioLanguage") or snippet.get("defaultLanguage")
             transcript, error, source = await resolve_transcript(video_id, languages, declared)
             return uc.build_video(item, transcript, synced_at), error, source
@@ -403,8 +419,17 @@ async def resolve_transcript(
     return NO_TRANSCRIPT, motivo, ""
 
 
-async def sync_pipeline(config: YouTubeConfig, api_key: str) -> list[YouTubeVideo]:
-    """Ejecuta el pipeline completo y devuelve los videos listos para guardar."""
+async def sync_pipeline(
+    config: YouTubeConfig,
+    api_key: str,
+    known_transcripts: Callable[[list[str]], Awaitable[dict[str, str]]] | None = None,
+) -> tuple[list[YouTubeVideo], bool]:
+    """Ejecuta el pipeline completo y devuelve (videos listos, busqueda completa).
+
+    `busqueda completa` es False si alguna peticion de busqueda fallo: en ese
+    caso el caller no debe podar el feed, porque faltarian resultados validos.
+    `known_transcripts` permite reutilizar transcripciones ya guardadas.
+    """
     # Antes de gastar cuota ni tiempo: si no hay nada que buscar, esto no es un
     # feed vacio sino una config sin configurar.
     ensure_youtube_searchable(config)
@@ -415,7 +440,14 @@ async def sync_pipeline(config: YouTubeConfig, api_key: str) -> list[YouTubeVide
     search_items = await fetcher._fetch_search_candidates(config, channel_ids)
     if not search_items:
         logger.warning("YouTube no devolvio candidatos")
-        return []
+        return [], fetcher.last_run_complete
 
     enriched = await fetcher._enrich_videos_batch(search_items)
-    return await fetcher._filter_and_transcribe(enriched, config)
+
+    known: dict[str, str] = {}
+    if known_transcripts is not None and enriched:
+        ids = [item["id"] for item in enriched if item.get("id")]
+        known = await known_transcripts(ids)
+
+    videos = await fetcher._filter_and_transcribe(enriched, config, known)
+    return videos, fetcher.last_run_complete

@@ -331,3 +331,121 @@ def test_build_video_returns_none_without_id():
     item = _full_item()
     del item["id"]
     assert uc.build_video(item, "") is None
+
+@pytest.mark.asyncio
+async def test_pipeline_reuses_stored_transcript_without_calling_apis(monkeypatch):
+    """Regresion: cada sync volvia a pedir la transcripcion de TODOS los videos.
+
+    Con la via gratuita bloqueada en Railway, eso gastaba la cuota mensual de
+    RapidAPI en pocas pasadas.
+    """
+    from src.infrastructure.external import youtube_api
+
+    fetcher_attrs: dict = {}
+
+    async def fake_search(self, config, channel_ids):
+        fetcher_attrs["self"] = self
+        return [{"id": {"videoId": "Pui2K4LNwBM"}}]
+
+    async def fake_enrich(self, items):
+        return [_full_item()]
+
+    async def boom(*args, **kwargs):
+        raise AssertionError("no se debe pedir una transcripcion que ya esta guardada")
+
+    monkeypatch.setattr(YouTubeFetcher, "_fetch_search_candidates", fake_search)
+    monkeypatch.setattr(YouTubeFetcher, "_enrich_videos_batch", fake_enrich)
+    monkeypatch.setattr(youtube_api, "resolve_transcript", boom)
+
+    async def known(ids):
+        assert ids == ["Pui2K4LNwBM"]
+        return {"Pui2K4LNwBM": "texto ya guardado"}
+
+    videos, complete = await sync_pipeline(
+        YouTubeConfig(keywords=["ia"], languages=["es"]), "key", known_transcripts=known
+    )
+
+    assert complete is True
+    assert len(videos) == 1
+    assert videos[0].transcript == "texto ya guardado"
+
+
+@pytest.mark.asyncio
+async def test_service_prunes_videos_outside_current_search(monkeypatch):
+    """Al cambiar keywords, lo que ya no devuelve la busqueda tiene que salir."""
+    from src.application.services import youtube_service
+
+    monkeypatch.setattr(youtube_service.settings, "youtube_api_key", "key", raising=False)
+
+    saved: list = []
+    deleted: list[list[str]] = []
+
+    class FakeRepo:
+        async def get_config(self):
+            return YouTubeConfig(keywords=["recetas"], languages=["es"])
+
+        async def update_config(self, config):
+            return config
+
+        async def get_transcripts(self, ids):
+            return {}
+
+        async def save_videos(self, videos):
+            saved.extend(videos)
+            return len(videos)
+
+        async def delete_videos_not_in(self, ids):
+            deleted.append(list(ids))
+            return 2
+
+    async def fake_pipeline(config, api_key, known_transcripts=None):
+        return [uc.build_video(_full_item(), "texto", NOW)], True
+
+    monkeypatch.setattr(youtube_service, "sync_pipeline", fake_pipeline)
+
+    service = youtube_service.YouTubeService(session=object())
+    service.repo = FakeRepo()
+
+    await service.sync_videos()
+
+    assert len(saved) == 1
+    assert deleted == [["Pui2K4LNwBM"]]
+
+
+@pytest.mark.asyncio
+async def test_service_does_not_prune_after_partial_search(monkeypatch):
+    """Un fallo parcial no puede borrar videos que si existen."""
+    from src.application.services import youtube_service
+
+    monkeypatch.setattr(youtube_service.settings, "youtube_api_key", "key", raising=False)
+
+    deleted: list = []
+
+    class FakeRepo:
+        async def get_config(self):
+            return YouTubeConfig(keywords=["recetas"], languages=["es"])
+
+        async def update_config(self, config):
+            return config
+
+        async def get_transcripts(self, ids):
+            return {}
+
+        async def save_videos(self, videos):
+            return len(videos)
+
+        async def delete_videos_not_in(self, ids):
+            deleted.append(ids)
+            return 0
+
+    async def fake_pipeline(config, api_key, known_transcripts=None):
+        return [uc.build_video(_full_item(), "texto", NOW)], False
+
+    monkeypatch.setattr(youtube_service, "sync_pipeline", fake_pipeline)
+
+    service = youtube_service.YouTubeService(session=object())
+    service.repo = FakeRepo()
+
+    await service.sync_videos()
+
+    assert deleted == []
