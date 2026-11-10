@@ -44,7 +44,11 @@ class YouTubeService:
             raise YouTubeServiceError(message)
 
         try:
-            new_videos: list[YouTubeVideo] = await sync_pipeline(config, settings.youtube_api_key)
+            videos, complete = await sync_pipeline(
+                config,
+                settings.youtube_api_key,
+                known_transcripts=self.repo.get_transcripts,
+            )
         except YouTubeConfigError as exc:
             # Config sin objetivos de busqueda. No es un fallo de la API de
             # YouTube sino de setup, y el usuario tiene que poder leerlo.
@@ -61,8 +65,21 @@ class YouTubeService:
             logger.exception("Fallo la sincronizacion de YouTube: %s", exc)
             raise YouTubeServiceError(f"Error sincronizando con la API de YouTube: {exc}") from exc
 
-        if new_videos:
-            await self.repo.save_videos(new_videos)
+        if videos:
+            await self.repo.save_videos(videos)
+
+            if complete:
+                # El feed refleja las keywords actuales: lo que ya no devuelve la
+                # busqueda se borra. Con una busqueda parcial no se poda, porque
+                # faltarian resultados de las peticiones que fallaron.
+                removed = await self.repo.delete_videos_not_in([v.id for v in videos])
+                if removed:
+                    logger.info("YouTube: %d videos fuera de la busqueda actual eliminados", removed)
+            else:
+                logger.warning(
+                    "YouTube: sync parcial, no se poda el feed para no borrar "
+                    "resultados de busquedas que fallaron"
+                )
 
         # La fecha se actualiza solo si el pipeline llego al final: asi un fallo
         # no evita que se reintente en la proxima pasada del scheduler.
@@ -70,11 +87,11 @@ class YouTubeService:
         await self.repo.update_config(config)
 
         duration = round(time.perf_counter() - started, 2)
-        logger.info("YouTube: %d videos sincronizados en %ss", len(new_videos), duration)
+        logger.info("YouTube: %d videos sincronizados en %ss", len(videos), duration)
         return {
             "status": "success",
             "source": "youtube",
-            "items_synced": len(new_videos),
+            "items_synced": len(videos),
             "duration_seconds": duration,
         }
 

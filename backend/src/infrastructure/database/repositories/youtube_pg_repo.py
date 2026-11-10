@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -99,6 +99,27 @@ class YouTubeRepository(YouTubeRepositoryBase):
         await self.session.execute(stmt)
         await self.session.commit()
         return len(videos)
+
+    async def get_transcripts(self, video_ids: list[str]) -> dict[str, str]:
+        if not video_ids:
+            return {}
+
+        stmt = select(YouTubeVideoModel.id, YouTubeVideoModel.transcript).where(
+            YouTubeVideoModel.id.in_(video_ids)
+        )
+        result = await self.session.execute(stmt)
+        return {video_id: (text or "") for video_id, text in result.all()}
+
+    async def delete_videos_not_in(self, video_ids: list[str]) -> int:
+        # Sin ids no se borra nada: un batch vacio puede ser un fallo de red, no
+        # una senal de que el feed deba quedar vacio.
+        if not video_ids:
+            return 0
+
+        stmt = delete(YouTubeVideoModel).where(YouTubeVideoModel.id.notin_(video_ids))
+        result = await self.session.execute(stmt)
+        await self.session.commit()
+        return result.rowcount or 0
 
     async def get_videos(
         self,

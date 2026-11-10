@@ -20,6 +20,23 @@ class YouTubeRepository(ABC):
         """Guarda/actualiza videos (upsert). Devuelve cuantos se procesaron."""
 
     @abstractmethod
+    async def get_transcripts(self, video_ids: list[str]) -> dict[str, str]:
+        """Transcripciones ya guardadas (`id -> texto`) para no volver a pedirlas.
+
+        Sin esto cada sync vuelve a llamar a YouTube/RapidAPI para los mismos
+        videos y agota la cuota de transcripciones en pocas pasadas.
+        """
+
+    @abstractmethod
+    async def delete_videos_not_in(self, video_ids: list[str]) -> int:
+        """Borra los videos que la busqueda actual ya no devuelve.
+
+        El feed de YouTube representa lo que piden las keywords activas, no un
+        historico: al cambiarlas, el contenido viejo tiene que desaparecer.
+        Devuelve cuantos se borraron.
+        """
+
+    @abstractmethod
     async def get_videos(
         self,
         limit: int = 20,
