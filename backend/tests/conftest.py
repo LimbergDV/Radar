@@ -16,6 +16,10 @@ import pytest
 
 from src.core.logging_config import setup_logging
 
+# iCloud deja copias tipo "test_x 2.py" en el arbol. No son tests del proyecto:
+# sin esto se recolectan y fallan contra el codigo nuevo.
+collect_ignore_glob = ["* 2.py"]
+
 # Antes de importar `settings`. El relleno solo se pone si no hay .env: las
 # variables de entorno tienen prioridad sobre el archivo y lo pisarían.
 if "DATABASE_URL" not in os.environ and not Path(".env").exists():

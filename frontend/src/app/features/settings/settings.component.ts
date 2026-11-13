@@ -168,6 +168,13 @@ export class SettingsComponent {
   }
 
   protected saveNews(): void {
+    void this.saveNewsConfig().catch(() => {
+      // El interceptor ya mostró el error; aquí sólo evitamos el unhandled.
+    });
+  }
+
+  /** Guarda y resuelve cuando el backend confirmó. Lo usa "Guardar y sincronizar". */
+  protected async saveNewsConfig(): Promise<void> {
     const current = this.news();
     if (!current) {
       return;
@@ -176,18 +183,24 @@ export class SettingsComponent {
 
     const payload: GoogleNewsConfig = { ...current, q: this.newsKeywords() };
 
-    this.api.updateNewsConfig(payload).subscribe({
-      next: (saved) => {
-        this.news.set(saved);
-        this.newsKeywords.set(saved.q);
-        this.saving.set(null);
-        this.toasts.success('Configuración de noticias guardada.');
-      },
-      error: () => this.saving.set(null),
-    });
+    try {
+      const saved = await firstValueFrom(this.api.updateNewsConfig(payload));
+      this.news.set(saved);
+      this.newsKeywords.set(saved.q);
+      this.toasts.success('Configuración de noticias guardada.');
+    } finally {
+      this.saving.set(null);
+    }
   }
 
   protected saveGitHub(): void {
+    void this.saveGitHubConfig().catch(() => {
+      // El interceptor ya mostró el error; aquí sólo evitamos el unhandled.
+    });
+  }
+
+  /** Guarda y resuelve cuando el backend confirmó. Lo usa "Guardar y sincronizar". */
+  protected async saveGitHubConfig(): Promise<void> {
     const current = this.github();
     if (!current) {
       return;
@@ -201,20 +214,26 @@ export class SettingsComponent {
       selected_languages: this.splitList(this.ghLanguages()),
     };
 
-    this.api.updateGitHubConfig(payload).subscribe({
-      next: (saved) => {
-        this.github.set(saved);
-        this.ghKeywords.set(saved.keywords.join(', '));
-        this.ghTopics.set(saved.selected_topics.join(', '));
-        this.ghLanguages.set(saved.selected_languages.join(', '));
-        this.saving.set(null);
-        this.toasts.success('Configuración de GitHub guardada.');
-      },
-      error: () => this.saving.set(null),
-    });
+    try {
+      const saved = await firstValueFrom(this.api.updateGitHubConfig(payload));
+      this.github.set(saved);
+      this.ghKeywords.set(saved.keywords.join(', '));
+      this.ghTopics.set(saved.selected_topics.join(', '));
+      this.ghLanguages.set(saved.selected_languages.join(', '));
+      this.toasts.success('Configuración de GitHub guardada.');
+    } finally {
+      this.saving.set(null);
+    }
   }
 
   protected savePapers(): void {
+    void this.savePapersConfig().catch(() => {
+      // El interceptor ya mostró el error; aquí sólo evitamos el unhandled.
+    });
+  }
+
+  /** Guarda y resuelve cuando el backend confirmó. Lo usa "Guardar y sincronizar". */
+  protected async savePapersConfig(): Promise<void> {
     const current = this.papers();
     if (!current) {
       return;
@@ -226,15 +245,14 @@ export class SettingsComponent {
       keywords: this.splitList(this.paperKeywords()),
     };
 
-    this.api.updatePapersConfig(payload).subscribe({
-      next: (saved) => {
-        this.papers.set(saved);
-        this.paperKeywords.set(saved.keywords.join(', '));
-        this.saving.set(null);
-        this.toasts.success('Configuración de papers guardada.');
-      },
-      error: () => this.saving.set(null),
-    });
+    try {
+      const saved = await firstValueFrom(this.api.updatePapersConfig(payload));
+      this.papers.set(saved);
+      this.paperKeywords.set(saved.keywords.join(', '));
+      this.toasts.success('Configuración de papers guardada.');
+    } finally {
+      this.saving.set(null);
+    }
   }
 
   protected onSynced(): void {
@@ -249,6 +267,9 @@ export class SettingsComponent {
 
   /** Versión enlazada para el botón "Guardar y sincronizar". */
   protected readonly saveYouTubeBeforeSync = (): Promise<void> => this.saveYouTubeConfig();
+  protected readonly saveNewsBeforeSync = (): Promise<void> => this.saveNewsConfig();
+  protected readonly saveGitHubBeforeSync = (): Promise<void> => this.saveGitHubConfig();
+  protected readonly savePapersBeforeSync = (): Promise<void> => this.savePapersConfig();
 
   protected setNews(patch: Partial<GoogleNewsConfig>): void {
     this.news.update((config) => (config ? { ...config, ...patch } : config));

@@ -73,9 +73,14 @@ def test_validate_news_rejects_invalid_when_value():
 def test_validate_news_keeps_valid_when_value():
     assert validate_google_news_config(GoogleNewsConfig(when="7d")).when == "7d"
 
-def test_validate_news_empty_query_falls_back_to_default():
+def test_validate_news_keeps_empty_query_as_general_headlines():
+    """Si el usuario borra la consulta debe quedarse vacia (titulares generales).
+
+    Antes se reemplazaba en silencio por la consulta de IA, asi que vaciar el
+    campo parecia no tener efecto.
+    """
     config = validate_google_news_config(GoogleNewsConfig(q="   "))
-    assert config.q == "Inteligencia Artificial OR IA"
+    assert config.q == ""
 
 def test_validate_news_clamps_days_window():
     assert validate_google_news_config(GoogleNewsConfig(days_window=999)).days_window == 365

@@ -41,6 +41,12 @@ class GitHubService:
 
         if new_repos:
             await self.repo.save_repos(new_repos)
+            # El feed refleja los filtros activos: lo que la busqueda ya no
+            # devuelve se borra. Si la busqueda vino vacia (rate limit, red) no
+            # se poda, para no vaciar el feed por un fallo.
+            removed = await self.repo.delete_repos_not_in([r.id for r in new_repos])
+            if removed:
+                logger.info("GitHub: %d repos fuera de los filtros actuales eliminados", removed)
 
         config.last_search_at = datetime.now(timezone.utc)
         await self.repo.update_config(config)
@@ -72,3 +78,13 @@ class GitHubService:
 
     async def update_config(self, config):
         return await self.repo.update_config(config)
+
+    async def clear_repos(self) -> int:
+        """Vacia el feed de GitHub.
+
+        Se llama cuando cambian keywords/topics/lenguajes/umbrales: lo guardado
+        responde a una busqueda que ya no es la del usuario.
+        """
+        removed = await self.repo.delete_all_repos()
+        logger.info("GitHub: feed vaciado (%d repos) por cambio de criterios", removed)
+        return removed

@@ -76,6 +76,11 @@ async def update_news_config(
     service = GoogleNewsService(db)
     current = await service.get_config()
 
+    # La consulta define QUE hay en el feed. Si cambia (texto, medio, titulo o
+    # region), lo guardado ya no responde a lo que pide el usuario: se vacia
+    # para que no se mezcle con los resultados nuevos.
+    search_changed = _search_signature(current) != _search_signature(payload)
+
     current.q = payload.q
     current.hl = payload.hl
     current.gl = payload.gl
@@ -87,4 +92,22 @@ async def update_news_config(
     current.days_window = payload.days_window
 
     saved = await service.update_config(current)
+    if search_changed:
+        await service.clear_articles()
+
     return GoogleNewsConfigResponse(**vars(saved))
+
+
+def _search_signature(config) -> tuple:
+    """Campos que definen QUE articulos devuelve la consulta.
+
+    `max_results` y `days_window` solo recortan: cambiarlos no deja obsoleto lo
+    que ya esta guardado.
+    """
+    return (
+        (config.q or "").strip().lower(),
+        (config.ceid or "").strip().lower(),
+        (config.site or "").strip().lower(),
+        (config.intitle or "").strip().lower(),
+        (config.when or "").strip().lower(),
+    )

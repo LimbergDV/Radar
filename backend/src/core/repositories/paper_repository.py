@@ -35,6 +35,18 @@ class PaperRepository(ABC):
         """Detalle de un paper (incluye abstract y AI summary)."""
 
     @abstractmethod
+    async def delete_all_papers(self) -> int:
+        """Vacia el feed de papers (se usa al cambiar los criterios de busqueda)."""
+
+    @abstractmethod
+    async def delete_papers_not_in(self, paper_ids: list[str]) -> int:
+        """Borra los papers que la busqueda actual ya no devuelve.
+
+        El feed refleja las keywords/ventana activas, no un historico. Devuelve
+        cuantos se borraron.
+        """
+
+    @abstractmethod
     async def count_papers(self, since: datetime | None = None) -> int:
         """Total de papers almacenados (para /api/feed/stats)."""
 

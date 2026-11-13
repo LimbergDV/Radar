@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -162,6 +162,21 @@ class PaperRepository(PaperRepositoryBase):
         )
         model = result.scalar_one_or_none()
         return _to_entity(model) if model else None
+
+    async def delete_all_papers(self) -> int:
+        result = await self.session.execute(delete(PaperModel))
+        await self.session.commit()
+        return result.rowcount or 0
+
+    async def delete_papers_not_in(self, paper_ids: list[str]) -> int:
+        # Sin ids no se borra nada: el pipeline puede devolver vacio si HF falla.
+        if not paper_ids:
+            return 0
+
+        stmt = delete(PaperModel).where(PaperModel.id.notin_(paper_ids))
+        result = await self.session.execute(stmt)
+        await self.session.commit()
+        return result.rowcount or 0
 
     async def count_papers(self, since: datetime | None = None) -> int:
         stmt = select(func.count()).select_from(PaperModel)

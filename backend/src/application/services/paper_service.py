@@ -37,6 +37,11 @@ class PaperService:
 
         if new_papers:
             await self.repo.save_papers(new_papers)
+            # El feed refleja las keywords/ventana activas: lo que ya no
+            # devuelve la busqueda se borra. Sin resultados no se poda.
+            removed = await self.repo.delete_papers_not_in([p.id for p in new_papers])
+            if removed:
+                logger.info("Papers: %d papers fuera de los criterios actuales eliminados", removed)
 
         config.last_search_at = datetime.now(timezone.utc)
         await self.repo.update_config(config)
@@ -76,3 +81,13 @@ class PaperService:
 
     async def update_config(self, config):
         return await self.repo.update_config(config)
+
+    async def clear_papers(self) -> int:
+        """Vacia el feed de papers.
+
+        Se llama cuando cambian keywords, ventana o vias activas: lo guardado
+        responde a una busqueda que ya no es la del usuario.
+        """
+        removed = await self.repo.delete_all_papers()
+        logger.info("Papers: feed vaciado (%d papers) por cambio de criterios", removed)
+        return removed
