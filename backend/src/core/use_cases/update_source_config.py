@@ -112,11 +112,7 @@ def validate_paper_config(config: PaperConfig) -> PaperConfig:
     Si se apagan las dos vías (daily y búsqueda) el sync no tendría de dónde
     sacar nada; se deja el Daily encendido como red de seguridad.
     """
-    config.keywords = _clean_list(config.keywords, limit=10) or [
-        "agents",
-        "reasoning",
-        "llm",
-    ]
+    config.keywords = _clean_list(config.keywords, limit=10)
     config.max_results = _clamp(config.max_results, 50, 1, MAX_RESULTS_CEILING)
     config.days_back = _clamp(config.days_back, 7, 1, 365)
     config.include_daily = bool(config.include_daily)

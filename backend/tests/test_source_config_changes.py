@@ -477,11 +477,11 @@ async def test_papers_daily_does_not_hide_keyword_results(monkeypatch):
 
     moment = datetime.now(timezone.utc)
 
-    def entry(paper_id: str, upvotes: int) -> dict:
+    def entry(paper_id: str, upvotes: int, title: str = "genomics paper") -> dict:
         return {
             "paper": {
                 "id": paper_id,
-                "title": f"Paper {paper_id}",
+                "title": title,
                 "summary": "resumen",
                 "publishedAt": (moment - timedelta(days=1)).isoformat(),
                 "upvotes": upvotes,
@@ -507,3 +507,60 @@ async def test_papers_daily_does_not_hide_keyword_results(monkeypatch):
     by_source = {p.source for p in papers}
     assert by_source == {"daily", "search"}
     assert sum(1 for p in papers if p.source == "search") == 5
+
+
+@pytest.mark.asyncio
+async def test_papers_keywords_filter_the_daily_feed(monkeypatch):
+    """El Daily Papers es curado y siempre de IA: las keywords deben filtrarlo.
+
+    La búsqueda de HF devuelve papers viejos que la ventana descarta, así que
+    sin filtrar el Daily el feed no cambiaba nunca al editar las keywords.
+    """
+    from datetime import timedelta
+
+    from src.core.entities.config import PaperConfig
+    from src.infrastructure.external import huggingface_papers_api as api
+
+    moment = datetime.now(timezone.utc)
+
+    def entry(paper_id: str, title: str) -> dict:
+        return {
+            "paper": {
+                "id": paper_id,
+                "title": title,
+                "summary": "resumen",
+                "publishedAt": (moment - timedelta(days=1)).isoformat(),
+                "upvotes": 1,
+                "authors": [],
+            }
+        }
+
+    async def fake_daily(self, client, days_back):
+        return [
+            entry("ai1", "Scaling language models with agents"),
+            entry("gen1", "Single-cell genomics atlas"),
+        ], 1, 0
+
+    monkeypatch.setattr(api.HuggingFacePapersFetcher, "fetch_daily", fake_daily)
+
+    config = PaperConfig(
+        keywords=["genomics"], max_results=10, include_daily=True, include_search=False
+    )
+    papers = await api.HuggingFacePapersFetcher().sync_pipeline(config)
+
+    assert [p.id for p in papers] == ["gen1"]
+
+
+def test_papers_without_keywords_keep_the_whole_daily():
+    from src.core.entities.paper import HuggingFacePaper
+    from src.core.use_cases.sync_papers import matches_keywords
+
+    paper = HuggingFacePaper(
+        id="x",
+        title="Video world models",
+        abstract="",
+        published_at=datetime.now(timezone.utc),
+    )
+    assert matches_keywords(paper, []) is True
+    assert matches_keywords(paper, ["genomics"]) is False
+    assert matches_keywords(paper, ["world"]) is True

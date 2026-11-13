@@ -172,12 +172,9 @@ class TestDedupeAndFreshness:
 
 
 class TestConfig:
-    def test_search_terms_use_defaults_when_empty(self):
-        assert uc.build_search_terms(PaperConfig(keywords=[])) == [
-            "agents",
-            "reasoning",
-            "llm",
-        ]
+    def test_search_terms_empty_when_no_keywords(self):
+        """Sin keywords no se busca: se usa solo el Daily (sin filtro)."""
+        assert uc.build_search_terms(PaperConfig(keywords=[])) == []
 
     def test_search_terms_are_cleaned_and_deduped(self):
         config = PaperConfig(keywords=[" agents ", "AGENTS", "", "vision"])
@@ -196,4 +193,6 @@ class TestConfig:
         assert config.max_results == 100
         assert config.days_back == 1
         assert config.include_daily is True
-        assert config.keywords == ["agents", "reasoning", "llm"]
+        # Sin keywords no se inventan unas por defecto: el feed muestra el
+        # Daily completo, que es lo que pide "sin filtro".
+        assert config.keywords == []

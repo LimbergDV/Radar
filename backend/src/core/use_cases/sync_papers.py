@@ -11,7 +11,6 @@ from typing import Any
 from src.core.entities.config import PaperConfig
 from src.core.entities.paper import HuggingFacePaper
 
-DEFAULT_KEYWORDS = ["agents", "reasoning", "llm"]
 MAX_AUTHORS = 20
 MAX_LINKED = 30
 MAX_KEYWORDS = 30
@@ -224,6 +223,27 @@ def rank(papers: list[HuggingFacePaper], limit: int) -> list[HuggingFacePaper]:
 
 
 def build_search_terms(config: PaperConfig) -> list[str]:
-    """Keywords limpias para `/api/papers/search`; defaults si no hay ninguna."""
-    terms = _clean_list(config.keywords, limit=10)
-    return terms or list(DEFAULT_KEYWORDS)
+    """Keywords limpias para `/api/papers/search`; vacío = no buscar."""
+    return _clean_list(config.keywords, limit=10)
+
+
+def matches_keywords(paper: HuggingFacePaper, keywords: list[str]) -> bool:
+    """¿El paper trata de alguna de las keywords configuradas?
+
+    El `daily_papers` de Hugging Face es un feed curado que siempre habla de
+    IA. Sin este filtro, cambiar las keywords del usuario no tenía ningún
+    efecto en el feed: el Daily acaparaba todas las posiciones.
+    """
+    terms = [k.strip().lower() for k in (keywords or []) if k and k.strip()]
+    if not terms:
+        return True
+
+    haystack = " ".join(
+        [
+            paper.title or "",
+            paper.abstract or "",
+            paper.ai_summary or "",
+            " ".join(paper.ai_keywords or []),
+        ]
+    ).lower()
+    return any(term in haystack for term in terms)

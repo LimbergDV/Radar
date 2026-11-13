@@ -141,6 +141,13 @@ class HuggingFacePapersFetcher:
                 f"({failures} fallos). Revisa la conectividad del backend."
             )
 
+        # El Daily es curado y siempre trata de IA: si el usuario configuró
+        # keywords, se aplican también aquí o el feed nunca reflejaría su
+        # búsqueda (la de HF devuelve papers viejos que el filtro descarta).
+        if config.keywords:
+            daily = [p for p in daily if uc.matches_keywords(p, config.keywords)]
+            search = [p for p in search if uc.matches_keywords(p, config.keywords)]
+
         logger.info(
             "HF Papers: %d del daily y %d de la búsqueda, únicos y frescos",
             len(daily),
