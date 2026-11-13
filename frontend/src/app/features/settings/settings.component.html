@@ -248,7 +248,7 @@
         <span class="field__label">Palabras clave</span>
         <input type="text" [ngModel]="paperKeywords()" (ngModelChange)="paperKeywords.set($event)"
                name="paperKeywords" placeholder="agents, reasoning, llm" />
-        <span class="field__hint">Se usan para la búsqueda de Hugging Face. El Daily Papers entra completo y siempre trata sobre IA: desactívalo si no lo quieres.</span>
+        <span class="field__hint">Búsqueda de Hugging Face. El Daily Papers (curado, siempre sobre IA) ocupa como máximo la mitad del feed; desactívalo si solo quieres tus keywords.</span>
       </label>
 
       <div class="row">
