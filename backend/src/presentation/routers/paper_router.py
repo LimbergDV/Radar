@@ -13,6 +13,7 @@ from src.application.dtos.paper_dto import (
 )
 from src.application.dtos.youtube_dto import SyncResponse
 from src.application.services.paper_service import PaperService, PaperServiceError
+from src.core.use_cases.update_source_config import normalize_values
 from src.presentation.dependencies import get_db
 
 router = APIRouter()
@@ -60,6 +61,10 @@ async def update_papers_config(
     service = PaperService(db)
     current = await service.get_config()
 
+    # Keywords, ventana y vías activas definen QUÉ papers entran. Si cambian,
+    # lo guardado ya no responde a lo que pide el usuario.
+    search_changed = _search_signature(current) != _search_signature(payload)
+
     current.keywords = payload.keywords
     current.max_results = payload.max_results
     current.days_back = payload.days_back
@@ -67,7 +72,20 @@ async def update_papers_config(
     current.include_search = payload.include_search
 
     saved = await service.update_config(current)
+    if search_changed:
+        await service.clear_papers()
+
     return PaperConfigResponse(**vars(saved))
+
+
+def _search_signature(config) -> tuple:
+    """Campos que definen QUÉ papers devuelve el sync."""
+    return (
+        tuple(normalize_values(config.keywords)),
+        config.days_back,
+        bool(config.include_daily),
+        bool(config.include_search),
+    )
 
 
 @router.post("/sync", response_model=SyncResponse)

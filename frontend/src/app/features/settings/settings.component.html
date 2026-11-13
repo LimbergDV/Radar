@@ -2,7 +2,7 @@
   title="Configuración"
   eyebrow="Fuentes"
   icon="Settings"
-  description="Define qué busca Radar en cada fuente. Los cambios aplican en la próxima sincronización."
+  description="Define qué busca Radar en cada fuente. Al cambiar los criterios, el feed de esa fuente se reinicia y se vuelve a llenar en la próxima sincronización."
 >
   <app-sync-button variant="ghost" label="Sincronizar todo" (synced)="onSynced()" />
 </app-page-header>
@@ -107,7 +107,7 @@
         <span class="field__label">Consulta</span>
         <input type="text" [ngModel]="newsKeywords()" (ngModelChange)="newsKeywords.set($event)"
                name="newsQ" placeholder="Inteligencia Artificial OR IA" />
-        <span class="field__hint">Se envía tal cual al RSS de Google News.</span>
+        <span class="field__hint">Vacío = titulares generales. Al cambiarla, el feed de noticias se reinicia.</span>
       </label>
 
       <div class="row">
@@ -164,7 +164,8 @@
         <button class="btn btn--solid" type="submit" [disabled]="saving() !== null">
           {{ saving() === 'news' ? 'Guardando…' : 'Guardar' }}
         </button>
-        <app-sync-button source="news" variant="ghost" label="Guardar y sincronizar" (synced)="onSynced()" />
+        <app-sync-button source="news" variant="ghost" label="Guardar y sincronizar"
+                         [before]="saveNewsBeforeSync" (synced)="onSynced()" />
       </div>
     </form>
   }
@@ -233,7 +234,8 @@
         <button class="btn btn--solid" type="submit" [disabled]="saving() !== null">
           {{ saving() === 'github' ? 'Guardando…' : 'Guardar' }}
         </button>
-        <app-sync-button source="github" variant="ghost" label="Guardar y sincronizar" (synced)="onSynced()" />
+        <app-sync-button source="github" variant="ghost" label="Guardar y sincronizar"
+                         [before]="saveGitHubBeforeSync" (synced)="onSynced()" />
       </div>
     </form>
   }
@@ -246,7 +248,7 @@
         <span class="field__label">Palabras clave</span>
         <input type="text" [ngModel]="paperKeywords()" (ngModelChange)="paperKeywords.set($event)"
                name="paperKeywords" placeholder="agents, reasoning, llm" />
-        <span class="field__hint">Se usan para la búsqueda de Hugging Face. El Daily Papers entra completo.</span>
+        <span class="field__hint">Se usan para la búsqueda de Hugging Face. El Daily Papers entra completo y siempre trata sobre IA: desactívalo si no lo quieres.</span>
       </label>
 
       <div class="row">
@@ -284,7 +286,8 @@
         <button class="btn btn--solid" type="submit" [disabled]="saving() !== null">
           {{ saving() === 'papers' ? 'Guardando…' : 'Guardar' }}
         </button>
-        <app-sync-button source="papers" variant="ghost" label="Guardar y sincronizar" (synced)="onSynced()" />
+        <app-sync-button source="papers" variant="ghost" label="Guardar y sincronizar"
+                         [before]="savePapersBeforeSync" (synced)="onSynced()" />
       </div>
     </form>
   }

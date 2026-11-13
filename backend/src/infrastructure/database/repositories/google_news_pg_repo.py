@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -107,6 +107,11 @@ class GoogleNewsRepository(GoogleNewsRepositoryBase):
         )
         model = result.scalar_one_or_none()
         return _to_entity(model) if model else None
+
+    async def delete_all_articles(self) -> int:
+        result = await self.session.execute(delete(GoogleNewsArticleModel))
+        await self.session.commit()
+        return result.rowcount or 0
 
     async def count_articles(
         self,

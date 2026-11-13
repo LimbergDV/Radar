@@ -95,3 +95,14 @@ class GoogleNewsService:
 
     async def update_config(self, config):
         return await self.repo.update_config(config)
+
+    async def clear_articles(self) -> int:
+        """Vacia el feed de noticias.
+
+        Se llama cuando cambia la consulta (q/site/intitle/ceid/when): lo
+        guardado responde a una busqueda que ya no es la del usuario y dejarlo
+        mezclado con lo nuevo es peor que un feed vacio hasta la proxima sync.
+        """
+        removed = await self.repo.delete_all_articles()
+        logger.info("Noticias: feed vaciado (%d articulos) por cambio de consulta", removed)
+        return removed

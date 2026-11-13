@@ -11,6 +11,7 @@ from src.application.dtos.github_dto import (
 )
 from src.application.dtos.youtube_dto import SyncResponse
 from src.application.services.github_service import GitHubService, GitHubServiceError
+from src.core.use_cases.update_source_config import normalize_values
 from src.presentation.dependencies import get_db
 
 router = APIRouter()
@@ -63,6 +64,10 @@ async def update_github_config(
     service = GitHubService(db)
     current = await service.get_config()
 
+    # Keywords, topics, lenguajes y umbrales definen QUE repos entran. Si
+    # cambian, lo guardado ya no responde a los filtros del usuario.
+    search_changed = _search_signature(current) != _search_signature(payload)
+
     current.keywords = payload.keywords
     current.days_active = payload.days_active
     current.min_stars = payload.min_stars
@@ -73,4 +78,20 @@ async def update_github_config(
     current.max_results = payload.max_results
 
     saved = await service.update_config(current)
+    if search_changed:
+        await service.clear_repos()
+
     return GitHubConfigResponse(**vars(saved))
+
+
+def _search_signature(config) -> tuple:
+    """Campos que definen QUE repos devuelve la busqueda."""
+    return (
+        tuple(normalize_values(config.keywords)),
+        tuple(normalize_values(config.selected_topics)),
+        tuple(normalize_values(config.selected_languages)),
+        config.days_active,
+        config.min_stars,
+        config.min_forks,
+        bool(config.require_license),
+    )

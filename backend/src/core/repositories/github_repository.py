@@ -30,6 +30,18 @@ class GitHubRepository(ABC):
         """Detalle de un repo (incluye README completo)."""
 
     @abstractmethod
+    async def delete_all_repos(self) -> int:
+        """Vacia el feed de GitHub (se usa al cambiar los criterios de busqueda)."""
+
+    @abstractmethod
+    async def delete_repos_not_in(self, repo_ids: list[int]) -> int:
+        """Borra los repos que la busqueda actual ya no devuelve.
+
+        El feed refleja los filtros activos, no un historico. Devuelve cuantos
+        se borraron.
+        """
+
+    @abstractmethod
     async def count_repos(
         self,
         language: str | None = None,

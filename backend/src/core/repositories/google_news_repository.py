@@ -30,6 +30,16 @@ class GoogleNewsRepository(ABC):
         """Detalle de un articulo (incluye contenido extraido)."""
 
     @abstractmethod
+    async def delete_all_articles(self) -> int:
+        """Vacia el feed de noticias (se usa al cambiar la consulta).
+
+        El feed representa la busqueda activa, no un historico: si el usuario
+        cambia `q`, `site`, `intitle` o `ceid`, lo guardado deja de responder a
+        lo que pidio y no debe seguir mezclado con los resultados nuevos.
+        Devuelve cuantos articulos se borraron.
+        """
+
+    @abstractmethod
     async def count_articles(
         self,
         language: str | None = None,

@@ -55,6 +55,11 @@ def _clamp(value: int | None, default: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(maximum, number))
 
 
+def normalize_values(values: list[str] | None) -> list[str]:
+    """Normaliza una lista de config para compararla sin importar orden, mayusculas ni espacios."""
+    return sorted({(value or "").strip().lower() for value in (values or []) if (value or "").strip()})
+
+
 def validate_youtube_config(config: YouTubeConfig) -> YouTubeConfig:
     """Normaliza keywords, canales, idiomas, limite de resultados y antiguedad."""
     config.keywords = _clean_list(config.keywords)
@@ -84,7 +89,7 @@ def ensure_youtube_searchable(config: YouTubeConfig) -> None:
 
 def validate_google_news_config(config: GoogleNewsConfig) -> GoogleNewsConfig:
     """Normaliza la query RSS y valida los parametros de region/ventana."""
-    config.q = (config.q or "").strip() or "Inteligencia Artificial OR IA"
+    config.q = (config.q or "").strip()
     config.hl = (config.hl or "es-419").strip() or "es-419"
     config.gl = (config.gl or "MX").strip() or "MX"
     config.site = (config.site or "").strip()

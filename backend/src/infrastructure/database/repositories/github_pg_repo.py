@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -127,6 +127,22 @@ class GitHubRepository(GitHubRepositoryBase):
         )
         model = result.scalar_one_or_none()
         return _to_entity(model) if model else None
+
+    async def delete_all_repos(self) -> int:
+        result = await self.session.execute(delete(GitHubRepoModel))
+        await self.session.commit()
+        return result.rowcount or 0
+
+    async def delete_repos_not_in(self, repo_ids: list[int]) -> int:
+        # Sin ids no se borra nada: una busqueda vacia puede ser un fallo de red
+        # o un rate limit, no una senal de que el feed deba quedar vacio.
+        if not repo_ids:
+            return 0
+
+        stmt = delete(GitHubRepoModel).where(GitHubRepoModel.id.notin_(repo_ids))
+        result = await self.session.execute(stmt)
+        await self.session.commit()
+        return result.rowcount or 0
 
     async def count_repos(
         self,
