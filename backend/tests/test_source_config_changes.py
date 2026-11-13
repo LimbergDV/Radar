@@ -461,3 +461,49 @@ async def test_papers_sync_prunes_papers_outside_current_search(monkeypatch):
     await service.sync_papers()
 
     assert calls["deleted"] == ["p1", "p2"]
+
+
+@pytest.mark.asyncio
+async def test_papers_daily_does_not_hide_keyword_results(monkeypatch):
+    """Con Daily + búsqueda activas, el feed debe incluir las dos vías.
+
+    El Daily se ordenaba por votos y acaparaba el límite, así que cambiar las
+    keywords no tenía efecto visible.
+    """
+    from datetime import timedelta
+
+    from src.core.entities.config import PaperConfig
+    from src.infrastructure.external import huggingface_papers_api as api
+
+    moment = datetime.now(timezone.utc)
+
+    def entry(paper_id: str, upvotes: int) -> dict:
+        return {
+            "paper": {
+                "id": paper_id,
+                "title": f"Paper {paper_id}",
+                "summary": "resumen",
+                "publishedAt": (moment - timedelta(days=1)).isoformat(),
+                "upvotes": upvotes,
+                "authors": [],
+            }
+        }
+
+    async def fake_daily(self, client, days_back):
+        return [entry(f"daily{i}", 1000) for i in range(10)], 1, 0
+
+    async def fake_search(self, client, terms, limit):
+        return [entry(f"search{i}", 1) for i in range(10)], 1, 0
+
+    monkeypatch.setattr(api.HuggingFacePapersFetcher, "fetch_daily", fake_daily)
+    monkeypatch.setattr(api.HuggingFacePapersFetcher, "fetch_search", fake_search)
+
+    config = PaperConfig(
+        keywords=["genomics"], max_results=10, include_daily=True, include_search=True
+    )
+    papers = await api.HuggingFacePapersFetcher().sync_pipeline(config)
+
+    assert len(papers) == 10
+    by_source = {p.source for p in papers}
+    assert by_source == {"daily", "search"}
+    assert sum(1 for p in papers if p.source == "search") == 5

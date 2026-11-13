@@ -34,8 +34,9 @@ class GoogleNewsConfig:
 class PaperConfig:
     """Qué papers de Hugging Face se sincronizan.
 
-    `keywords` sólo se usa para la búsqueda por relevancia; el Daily Papers es
-    un feed curado y entra completo dentro de `days_back`.
+    `keywords` se usa para la búsqueda por relevancia. El Daily Papers es un
+    feed curado: cuando las dos vías están activas ocupa como máximo la mitad
+    del feed, para que las keywords siempre tengan efecto.
     """
 
     keywords: list[str] = field(default_factory=lambda: ["agents", "reasoning", "llm"])

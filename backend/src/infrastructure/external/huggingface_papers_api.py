@@ -95,8 +95,15 @@ class HuggingFacePapersFetcher:
         return entries, ok, failures
 
     async def sync_pipeline(self, config: PaperConfig) -> list[HuggingFacePaper]:
-        """Daily + búsqueda, deduplicado y recortado a la ventana configurada."""
-        collected: list[HuggingFacePaper] = []
+        """Daily + búsqueda, deduplicado y recortado a la ventana configurada.
+
+        Cuando las dos vías están activas se reserva la mitad del feed para la
+        búsqueda por keywords. Sin eso, el Daily (curado y siempre sobre IA)
+        acaparaba el ranking por votos y cambiar las keywords no tenía ningún
+        efecto visible en el feed.
+        """
+        daily: list[HuggingFacePaper] = []
+        search: list[HuggingFacePaper] = []
         ok = failures = 0
 
         async with httpx.AsyncClient(
@@ -110,7 +117,9 @@ class HuggingFacePapersFetcher:
                 )
                 ok += daily_ok
                 failures += daily_fail
-                collected.extend(self._map(entries, source="daily"))
+                daily = uc.within_days(
+                    uc.dedupe(self._map(entries, source="daily")), config.days_back
+                )
                 logger.info("HF Daily Papers: %d entradas", len(entries))
 
             if config.include_search:
@@ -121,7 +130,9 @@ class HuggingFacePapersFetcher:
                 )
                 ok += search_ok
                 failures += search_fail
-                collected.extend(self._map(entries, source="search"))
+                search = uc.within_days(
+                    uc.dedupe(self._map(entries, source="search")), config.days_back
+                )
                 logger.info("HF papers/search %s: %d entradas", terms, len(entries))
 
         if ok == 0 and failures > 0:
@@ -130,11 +141,28 @@ class HuggingFacePapersFetcher:
                 f"({failures} fallos). Revisa la conectividad del backend."
             )
 
-        papers = uc.within_days(uc.dedupe(collected), config.days_back)
         logger.info(
-            "HF Papers: %d entradas -> %d únicas y frescas", len(collected), len(papers)
+            "HF Papers: %d del daily y %d de la búsqueda, únicos y frescos",
+            len(daily),
+            len(search),
         )
-        return uc.rank(papers, config.max_results)
+
+        if config.include_daily and config.include_search:
+            limit = max(1, config.max_results)
+            # La búsqueda siempre tiene sitio: si no, el Daily la tapa.
+            daily_slots = max(1, limit // 2)
+            result = uc.dedupe(
+                uc.rank(daily, daily_slots) + uc.rank(search, limit - daily_slots)
+            )
+            # Si una vía trajo menos de lo esperado, la otra completa el feed.
+            if len(result) < limit:
+                result = uc.dedupe(result + uc.rank(search, limit))
+            if len(result) < limit:
+                result = uc.dedupe(result + uc.rank(daily, limit))
+            return result[:limit]
+
+        only = daily if config.include_daily else search
+        return uc.rank(only, config.max_results)
 
     @staticmethod
     def _map(entries: list[dict], *, source: str) -> list[HuggingFacePaper]:
